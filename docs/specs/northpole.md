@@ -17,9 +17,11 @@ for anything but judgment that needs their standard. Mid-course problems
 are solved by delegating again, not handed back; every turn of that
 drive is on the record. The human supervises — sets the destination,
 can take the wheel at any time, and is shown the route afterwards — but
-does not steer.
+does not steer. The destination is only what the human said: this file
+constrains how the car drives, it is not a map of places to go. Gaps here
+are reported, never self-assigned.
 
-- since 2026-09-08 · revised 2026-09-08
+- since 2026-09-08 · revised 2026-09-08 (added: the north pole is a constraint, not a source of work — an orchestrator on delegation was seen inventing work from GAPs)
 - served by: `DELEGATE … UNTIL …` comment on the `delegation` issue,
   `otr approve/accept --via delegation`, `otr issue --origin` for deviations,
   the Drive section of `CLAUDE.md`. `GAP`: the drive runs inside one

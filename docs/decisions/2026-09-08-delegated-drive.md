@@ -3,7 +3,7 @@ id: delegated-drive
 status: frozen
 scope:
   globs: ["CLAUDE.md", "commands/run.md"]
-  keywords: ["auto-approve", "auto-accept", "delegation", "via delegation"]
+  keywords: ["auto-approve", "auto-accept", "delegation", "via delegation", "self-assigned", "fill the gap"]
 ---
 
 # Full self-drive under a human-committed delegation
@@ -34,6 +34,16 @@ commit is honoured the moment it lands.
 The human chose full drive (approve and accept both delegated) over
 supervised drive (accept kept manual). Reversal cost is low in git — a
 `REJECT` commit plus `git revert` of the `ACCEPT` merge.
+
+## Scope of a delegation
+
+A delegation covers only what the human asked for and what those sessions
+report as deviations (`otr issue --origin issue-<n>/<hex> deviation`). It
+never covers work the orchestrator derives on its own — from north pole
+`GAP`s, from things noticed in passing, from "while we're here". Observed
+in the source project: an orchestrator under delegation read the north
+pole, decided to close its gaps, and drifted. Such ideas go in the final
+report's **limits**, where the human can turn them into a need.
 
 ## Consequences
 

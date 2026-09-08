@@ -67,6 +67,14 @@ the pinned `delegation` issue. The loop above then runs without a human turn:
 5. Rejected or failed delivery → `otr reject` with the reason, then spawn a new session
    on the same issue with the reason as the task. Third failure on one issue → stop.
 
+The destination is only what the human said. Under delegation the orchestrator may open
+an issue for exactly two reasons: the human stated the need in this conversation, or a
+subagent's `## Deviations` names it (`--origin` pointing at that session). The north pole
+is a constraint on how work is done, never a source of work: a `GAP` there, an improvement
+you notice, a "while we're here" — none of these become issues. Put them in the final
+report's **limits**; the human decides. An orchestrator that starts filling gaps on its
+own has left the road.
+
 Stop and ask the human only when: `otr accept` refuses on a frozen principle; the
 delegation does not cover the issue or has expired; an issue has failed three sessions;
 or the change needs a standard only the human holds (product taste, spend, outward

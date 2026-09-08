@@ -2,7 +2,7 @@
 id: git-only-ledger
 status: frozen
 scope:
-  globs: ["tools/otr.py", "docs/issue-*/**", "docs/specs/**"]
+  globs: ["tools/otr.py", "docs/specs/**", "docs/templates/**"]
   keywords: ["github issue", "pull request", "label", "gh api", "gh pr", "gh issue"]
 ---
 

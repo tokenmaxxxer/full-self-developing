@@ -2,7 +2,7 @@
 issue: 3
 title: board: show in-flight branches with their record state
 opened: 2026-09-08
-state: open   # open | done | rejected
+state: done   # open | done | rejected
 ---
 
 # issue-3 — board: show in-flight branches with their record state

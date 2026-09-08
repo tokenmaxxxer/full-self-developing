@@ -178,8 +178,6 @@ def cmd_spawn(a: argparse.Namespace) -> None:
     )
     settings = session_settings(n, hexid)
     cmd = ["claude", "-p", directive, "--settings", str(settings), "--permission-mode", "bypassPermissions"]
-    if a.max_turns:
-        cmd += ["--max-turns", str(a.max_turns)]
     if a.model:
         cmd += ["--model", a.model]
     env = {**os.environ, "OTR_ISSUE": str(n), "OTR_SESSION": hexid}
@@ -339,7 +337,7 @@ def main() -> None:
     p = sp.add_parser("issue"); p.add_argument("title"); p.set_defaults(fn=cmd_issue)
     p = sp.add_parser("spawn"); p.add_argument("issue", type=int); p.add_argument("task", nargs="?", default="")
     p.add_argument("--phase", choices=["proposal", "delivery"], default="proposal"); p.add_argument("--session")
-    p.add_argument("--max-turns", type=int); p.add_argument("--model"); p.add_argument("--dry-run", action="store_true"); p.set_defaults(fn=cmd_spawn)
+    p.add_argument("--model"); p.add_argument("--dry-run", action="store_true"); p.set_defaults(fn=cmd_spawn)
     p = sp.add_parser("board"); p.set_defaults(fn=cmd_board)
     p = sp.add_parser("approve"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("note", nargs="?"); p.set_defaults(fn=cmd_approve)
     p = sp.add_parser("accept"); p.add_argument("issue", type=int); p.add_argument("hex"); p.set_defaults(fn=cmd_accept)

@@ -1,12 +1,28 @@
 # North pole
 
-What this repository is for, as currently understood. This is a managed
+What this repository is for, as currently understood. N0 is the
+destination; the others are what makes it reachable. This is a managed
 document, not a log: when the human's thinking changes or sharpens, the
 entry is edited in place, merged with a neighbour, or removed. History is
 `git log -p docs/specs/northpole.md`; the file only ever states the present.
 
 Each entry: one sentence of intent, `since` (first stated) and `revised`
 (last changed), and what currently serves it — or `GAP`.
+
+## N0 — Full self-developing
+
+The point of the repository, and its name: a stated need is driven to a
+verified, landed, legibly reported result without the human in the loop
+for anything but judgment that needs their standard. Mid-course problems
+are solved by delegating again, not handed back; every turn of that
+drive is on the record. The human supervises — sets the destination,
+can take the wheel at any time, and is shown the route afterwards — but
+does not steer.
+
+- since 2026-09-08 · revised 2026-09-08
+- served by: N1–N4 are the preconditions; the drive itself is `GAP` —
+  today the orchestrator stops at every gate (confirm, approve, accept)
+  and waits for a human turn
 
 ## N1 — Git is the whole record
 

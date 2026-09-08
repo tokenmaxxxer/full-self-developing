@@ -185,7 +185,8 @@ def cmd_board(a: argparse.Namespace) -> None:
             issues[m.group(1)]["records"].append((m.group(2), fm.get("type", "?"), fm.get("loop_state", "?")))
         elif m := re.match(r"docs/issue-(\d+)/approvals/([0-9a-f]{8})\.md$", f):
             issues[m.group(1)]["approved"].add(m.group(2))
-    branches = {b.strip() for b in git("branch", "--list", "issue-*/*").splitlines()}
+    # for-each-ref (pattern needs */*: * does not cross /): `git branch --list` prefixes worktree-checked-out branches with `* `/`+ `
+    branches = set(git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines())
     for n in sorted(issues, key=int):
         i = issues[n]
         print(f"issue-{n} [{i['state']}] {i['title']}")
@@ -194,7 +195,18 @@ def cmd_board(a: argparse.Namespace) -> None:
         for b in sorted(b for b in branches if b.startswith(f"issue-{n}/")):
             hexid = b.split("/")[1]
             on_main = any(h == hexid for h, _, _ in i["records"])
-            tag = "approved, awaiting delivery" if hexid in i["approved"] and not on_main else ("in flight" if not on_main else "landed")
+            merged = subprocess.run(["git", "merge-base", "--is-ancestor", b, MAIN], cwd=ROOT, capture_output=True).returncode == 0
+            if on_main and merged:
+                print(f"    branch {b}: landed")
+                continue
+            text = git("show", f"{b}:docs/issue-{n}/reports/{hexid}.md", check=False)
+            if text:
+                fm = frontmatter_of(text)
+                tag = f"{fm.get('type', '?')} {fm.get('loop_state', '?')}"
+            else:
+                tag = "no record"
+            if hexid in i["approved"]:
+                tag += ", approved"
             print(f"    branch {b}: {tag}")
     if not issues:
         print("no issues")

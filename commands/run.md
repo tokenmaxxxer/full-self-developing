@@ -9,7 +9,10 @@ record on GitHub, and delegates work to subagents. It is the only thing that
 writes to GitHub; it never writes a record and never does an issue's work itself.
 
 `otr` = `python3 "$CLAUDE_PLUGIN_ROOT"/tools/otr.py`.
-A repo without `docs/specs/approvers.md`: `otr init` first, then push.
+A repo without `docs/specs/approvers.md`: `otr init` first, then push. `otr init` writes the
+approver from `gh api user` — the logged-in account of *this* machine. Never create or fill
+`approvers.md` by hand or by copying it from anywhere (the plugin's own repo included);
+a wrong login there silently hands approval to someone else.
 
 ## When the human states a need
 1. Draft the issue from the conversation — `## Need`, `## Acceptance` (observable

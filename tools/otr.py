@@ -116,7 +116,9 @@ def frontmatter_of(text: str) -> dict[str, str]:
 # ---------------------------------------------------------------- init
 
 def cmd_init(a: argparse.Namespace) -> None:
-    login = me() or "<github-login>"
+    login = me()
+    if not login:
+        sys.exit("otr: `gh api user` returned nothing — log in with `gh auth login` (as the account that will approve) and rerun")
     made = []
 
     def put(rel: str, text: str) -> None:
@@ -128,7 +130,7 @@ def cmd_init(a: argparse.Namespace) -> None:
         made.append(rel)
 
     today = _now().date().isoformat()
-    put("docs/specs/approvers.md", f"# Approvers\n\nOne GitHub login per line. Only these may approve, accept, reject, delegate.\n\n{login}\n")
+    put("docs/specs/approvers.md", f"# Approvers\n\nOne GitHub login per line. Only these may approve, accept, reject, delegate.\nWritten by `otr init` from `gh api user`; add a line only for a person you mean.\n\n{login}\n")
     put("docs/decisions/README.md", (PKG / "docs/decisions/README.md").read_text())
     put("docs/specs/northpole.md", f"# North pole\n\nWhat this repository is for, as currently understood. Edited in place as\nthinking changes; history is `git log -p` on this file.\n\n## N0 — \n\n- since {today} · revised {today}\n- served by: GAP\n")
     gi = ROOT / ".gitignore"

@@ -22,11 +22,12 @@ chat, a GitHub issue, or a label.
 
 The interactive session orchestrates; subagents do the work on their own
 branch and hand back a record; the human decides at fixed points
-(confirm issue, approve proposal, accept or reject delivery). Nothing
-else from the source project — roles, skills, sandboxing, hooks — is
-carried over.
+(confirm issue, approve proposal, accept or reject delivery). A subagent
+gets a task and the shared environment, nothing more: no role, no
+mounted skill set, no per-session sandbox or hooks. Whatever tools or
+skills already exist in the environment, it uses at its own discretion.
 
-- since 2026-09-08 · revised 2026-09-08
+- since 2026-09-08 · revised 2026-09-08 (subagents pick their own means; nothing is prescribed per session)
 - served by: `tools/otr.py directive`, `CLAUDE.md`; decision `no-roles-skills-or-isolation`
 
 ## N3 — A round leaves no residue

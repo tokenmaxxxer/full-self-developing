@@ -14,7 +14,9 @@ Date: 2026-09-08.
 
 A session is `issue + hex`; what it does is the task text. There is no role
 file, no rulebook or skill mounted per session, no sandbox, no hooks, and
-no headless `claude -p` spawn. Delegation is the interactive session
+no headless `claude -p` spawn. The subagent shares the operator's
+environment and uses whatever is in it — including any skills installed
+there — on its own judgment; the directive never names one. Delegation is the interactive session
 passing `otr directive` output to the Agent tool.
 
 ## Why

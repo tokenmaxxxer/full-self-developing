@@ -34,7 +34,9 @@ The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE
 | approval | `docs/issue-<n>/approvals/<hex>.md` | human in `docs/specs/approvers.md` |
 | acceptance | merge commit `ACCEPT issue-<n>/<hex>` | human |
 | rejection | `docs/issue-<n>/rejections/<hex>.md` | human |
-| design decisions | `docs/decisions/` | either, by PR |
+| what the repo is for | `docs/specs/northpole.md` — the human's verbatim words | orchestrator, appended |
+| principles | `docs/decisions/*.md` with `status: frozen` + scope | human |
+| other decisions | `docs/decisions/*.md` `active` / `superseded` | either |
 
 ## Invariants
 
@@ -45,9 +47,11 @@ The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE
 3. A subagent never lands, pushes, merges, or opens new work. Scope overflow goes under
    `## Deviations` in the record and the subagent stops.
 4. Every claim in a record cites the command and output that produced it.
-5. Judgment without a standard is `tools/record_lint.py` (run by the subagent before its
-   last commit and by `otr accept`); judgment with a standard is the human's
+5. Judgment without a standard is `tools/record_lint.py` and the frozen-scope check in
+   `otr accept` (`tools/decisions.py`); judgment with a standard is the human's
    approve / accept / reject.
+6. A frozen decision is touched only with `reaffirms <id>` in the record, or it is a
+   deviation and the subagent stops. Unfreezing is a human's superseding decision.
 
 These hold by convention and by the directive text, not by sandboxing — the source
 project's hooks and per-role environments were deliberately left out.

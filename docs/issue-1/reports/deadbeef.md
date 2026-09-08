@@ -19,6 +19,9 @@ Proposal only.
 
 ## What did not work
 
+## Principles
+not applicable — this record predates the frozen-decision rule (backfilled section, content unchanged)
+
 ## Deviations
 
 ## Acceptance verification

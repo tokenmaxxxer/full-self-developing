@@ -99,6 +99,10 @@ All work and every command below happens inside that directory.
 Scratch files (probe repos, temp clones, logs) go ONLY under {root}/runs/scratch/issue-{n}-{hex}/
 — never under /tmp or $HOME. Delete that directory before your final reply.
 
+BEFORE ANYTHING ELSE read docs/specs/northpole.md (what this repo is for, verbatim) and every
+`status: frozen` file in docs/decisions/ (`python3 tools/decisions.py` lists them). A change
+that works against either is a deviation to record, never a judgment call to make.
+
 TASK
 {task}
 
@@ -114,6 +118,11 @@ RECORD
   ("all tests pass") without the command are not evidence.
 - Before your final commit run `python3 tools/record_lint.py docs/issue-{n}/reports/{hex}.md`
   and fix everything it prints. Commit everything; leave no uncommitted changes.
+
+PRINCIPLES
+- Under ## Principles list `reaffirms <id>` for every frozen decision whose scope (path
+  globs / keywords) your diff or record touches, or `none touched`. `otr accept` refuses a
+  branch that touches a frozen scope without the matching line.
 
 SCOPE
 - The requirement is docs/issue-{n}/issue.md. Do not widen it. If finishing needs something
@@ -268,6 +277,7 @@ def cmd_accept(a: argparse.Namespace) -> None:
             git("worktree", "remove", "--force", td, check=False)
     if lint.returncode:
         sys.exit("otr: record lint fails:\n" + lint.stdout)
+    _require_principles(branch, text)
     git("merge", "--no-ff", "-q", "-m", f"ACCEPT issue-{a.issue}/{a.hex}", branch)
     _set_issue_state(a.issue, "done")
     _cleanup(branch, ws)
@@ -297,6 +307,20 @@ REJECT issue-{a.issue}/{a.hex}
     git("commit", "-q", "-m", f"REJECT issue-{a.issue}/{a.hex}: {a.reason[:60]}")
     _cleanup(branch, WS / f"issue-{a.issue}-{a.hex}")
     print(f"rejected {branch} (recorded at {sha[:8]} in {p.relative_to(ROOT)}); branch and worktree removed")
+
+
+def _require_principles(branch: str, record_text: str) -> None:
+    """A branch touching a frozen decision's scope must carry `reaffirms <id>`
+    in its record (docs/decisions/README.md). Mechanical only: whether the
+    change actually honours the principle is the human's read of the diff."""
+    sys.path.insert(0, str(TOOLS))
+    import decisions
+    paths = git("diff", "--name-only", f"{MAIN}...{branch}").splitlines()
+    missing = [(d, why) for d, why in decisions.touched(paths, record_text)
+               if not re.search(rf"reaffirms\s+{re.escape(d.id)}\b", record_text)]
+    if missing:
+        lines = [f"  {d.id}  ({why})  — {d.path.relative_to(ROOT)}" for d, why in missing]
+        sys.exit("otr: branch touches frozen decision(s) with no `reaffirms <id>` under ## Principles:\n" + "\n".join(lines))
 
 
 def _set_issue_state(n: int, state: str) -> None:

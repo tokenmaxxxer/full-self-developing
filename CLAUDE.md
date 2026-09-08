@@ -31,6 +31,16 @@ never does an issue's work itself.
    Both remove the worktree, branch, and scratch dir. If a subagent died mid-run,
    `otr clean --all` removes what it left; plain `otr clean` only touches finished sessions.
 
+## Direction of record
+- `docs/specs/northpole.md` holds what the repo is for in the human's verbatim words.
+  When the human states a direction ("~해야 한다", "~는 빼", "~를 가져오고 싶어"), append
+  it there as a new `## N<k>` quote — unedited, untranslated — with `served by:` or `GAP`.
+- A principle the human settles becomes `docs/decisions/<date>-<slug>.md` with
+  `status: frozen` and a scope. Only the human unfreezes it (new superseding decision).
+- Before accepting, `otr accept` checks every frozen decision the diff touches has a
+  `reaffirms <id>` line; the orchestrator still reads the diff and says whether it
+  actually honours the principle — the check is mechanical, the judgment is not.
+
 ## Rules the orchestrator keeps
 - Approval, acceptance and rejection are relayed only after the human said so in
   this conversation — never inferred.

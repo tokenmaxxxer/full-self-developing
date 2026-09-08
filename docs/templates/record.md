@@ -19,6 +19,11 @@ upstream: []            # [{path: <record or file>, sha: <commit>}]
 
 ## What did not work
 
+## Principles
+
+<For each frozen decision in docs/decisions/ whose scope your diff or this record
+touches: `reaffirms <id>` — one per line. Write `none touched` otherwise.>
+
 ## Deviations
 
 <Anything outside the issue's scope that came up. Recorded, not fixed.>

@@ -1,6 +1,14 @@
+---
+id: git-only-ledger
+status: frozen
+scope:
+  globs: ["tools/otr.py", "docs/issue-*/**", "docs/specs/**"]
+  keywords: ["github issue", "pull request", "label", "gh api", "gh pr", "gh issue"]
+---
+
 # Git is the only ledger
 
-Date: 2026-09-08. Status: accepted.
+Date: 2026-09-08.
 
 ## Decision
 

@@ -17,7 +17,7 @@ TYPES = {"proposal", "implementation", "verification", "repair"}
 LOOP_STATES = {"proposed", "approved", "landed", "done"}
 TERMINAL = {"landed", "done"}
 REQUIRED = ["issue", "author", "type", "loop_state", "verdict"]
-REQUIRED_SECTIONS = ["## What was done", "## Evidence"]
+REQUIRED_SECTIONS = ["## What was done", "## Evidence", "## Principles"]
 HEX_RE = re.compile(r"^[0-9a-f]{8}$")
 
 

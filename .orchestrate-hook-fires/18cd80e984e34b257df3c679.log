@@ -1,0 +1,7 @@
+2026-09-08T05:16:24Z UserPromptSubmit directive.sh
+2026-09-08T05:16:42Z Stop delegation-live-check.sh
+2026-09-08T05:16:42Z Stop stop-gate.sh
+2026-09-08T05:16:42Z Stop stop-poll-rearm.sh deadman-check
+2026-09-08T05:16:45Z Stop stop-gate.sh
+2026-09-08T05:16:45Z Stop delegation-live-check.sh
+2026-09-08T05:16:45Z Stop stop-poll-rearm.sh deadman-check

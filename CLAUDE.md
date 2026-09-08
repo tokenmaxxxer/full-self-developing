@@ -13,7 +13,7 @@ never does an issue's work itself.
 
 ## Delegating (phase 1 — proposal)
 2. `otr directive <n> "<task>"` prints the prompt. Spawn one subagent (Agent tool,
-   general-purpose) with that prompt verbatim. The subagent makes its own worktree
+   general-purpose, `model: sonnet` unless the human names another) with that prompt verbatim. The subagent makes its own worktree
    and branch `issue-<n>/<hex>`; run several in parallel for competing proposals.
 3. When it returns, read `git diff main...issue-<n>/<hex>` and the record, and
    explain to the human: what it proposes, its `verdict:`, and its `## Deviations`.

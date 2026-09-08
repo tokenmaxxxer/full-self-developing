@@ -1,38 +1,48 @@
 # North pole
 
-What this repository is for, in the operator's own words, verbatim and
-undated-by-paraphrase. Append; never rewrite a quote. Each entry names the
-mechanism that currently serves it, or `GAP` when nothing does yet.
+What this repository is for, as currently understood. This is a managed
+document, not a log: when the human's thinking changes or sharpens, the
+entry is edited in place, merged with a neighbour, or removed. History is
+`git log -p docs/specs/northpole.md`; the file only ever states the present.
 
-A subagent reads this before starting; a change that works against an entry
-is a deviation, not a judgment call.
+Each entry: one sentence of intent, `since` (first stated) and `revised`
+(last changed), and what currently serves it — or `GAP`.
 
-## N1
+## N1 — Git is the whole record
 
-> 저기서 git을 이용한 기록 체계와, 서브 에이전트 위임 체계를 가져오고 싶어.
+Everything a future session or person needs is in the repository:
+requirement, work, rationale with evidence, approval, acceptance,
+rejection, and the repo's own direction. Nothing of record lives in a
+chat, a GitHub issue, or a label.
 
-served by: `docs/issue-<n>/`, `tools/otr.py directive`, `CLAUDE.md`
+- since 2026-09-08 · revised 2026-09-08
+- served by: `docs/issue-<n>/`, `docs/decisions/`, this file; decision `git-only-ledger`
 
-## N2
+## N2 — Work is delegated to subagents, judgment stays with the human
 
-> 기록의 거의 모든게 git에 있어야 하지 않나?
+The interactive session orchestrates; subagents do the work on their own
+branch and hand back a record; the human decides at fixed points
+(confirm issue, approve proposal, accept or reject delivery). Nothing
+else from the source project — roles, skills, sandboxing, hooks — is
+carried over.
 
-served by: `docs/decisions/2026-09-08-git-only-ledger.md` (frozen)
+- since 2026-09-08 · revised 2026-09-08
+- served by: `tools/otr.py directive`, `CLAUDE.md`; decision `no-roles-skills-or-isolation`
 
-## N3
+## N3 — A round leaves no residue
 
-> 저 레포에서 역할같은건 다 필요가 없고 … skill도 뺄거야 … env 나눌 필요 없어. 저 기록 체계랑 서브에이전트 활용하는 아이디어만 가져오려는거야.
+Everything a session creates lives under `runs/` inside the repo and is
+removed on accept, reject, or `otr clean`; nothing is written to `/tmp`
+or `$HOME`.
 
-served by: `docs/decisions/2026-09-08-no-roles-skills-or-isolation.md` (frozen)
+- since 2026-09-08 · revised 2026-09-08
+- served by: directive scratch rule, `otr accept/reject/clean`
 
-## N4
+## N4 — The repo states its own direction
 
-> 워크트리같은거 새로 만드는게 로컬 PC에 잔재들이 남거나 하면 안되는데 … /tmp 아래도 직접 정리하게 해
+This file says what the repo is for; frozen decisions say which
+principles a change may not silently cross. Both are kept current by
+editing, so a reader gets today's intent, not a history to reconstruct.
 
-served by: directive scratch rule (`runs/scratch/` only), `otr accept/reject/clean`
-
-## N5
-
-> On the record에서 한 가지 더 차용하고 싶은 체계가 뭐냐면, 레포의 지향점을 기록해두는 체계야.
-
-served by: this file, `docs/decisions/` frontmatter `status: frozen` + `tools/decisions.py`, `otr accept` principle check
+- since 2026-09-08 · revised 2026-09-08
+- served by: this file, `docs/decisions/` (`status: frozen`), `otr accept` principle check

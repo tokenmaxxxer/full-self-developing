@@ -32,9 +32,12 @@ never does an issue's work itself.
    `otr clean --all` removes what it left; plain `otr clean` only touches finished sessions.
 
 ## Direction of record
-- `docs/specs/northpole.md` holds what the repo is for in the human's verbatim words.
-  When the human states a direction ("~해야 한다", "~는 빼", "~를 가져오고 싶어"), append
-  it there as a new `## N<k>` quote — unedited, untranslated — with `served by:` or `GAP`.
+- `docs/specs/northpole.md` states what the repo is for *as currently understood*. It is
+  managed, not appended: when the human states, changes, or sharpens a direction, edit
+  the matching entry in place (bump `revised`), merge entries that now say one thing, or
+  remove one that no longer holds — and say in the commit message what changed and why.
+  Add a new `## N<k>` only for a genuinely new intent. Read the current file before
+  editing; never reconstruct it from memory of the conversation.
 - A principle the human settles becomes `docs/decisions/<date>-<slug>.md` with
   `status: frozen` and a scope. Only the human unfreezes it (new superseding decision).
 - Before accepting, `otr accept` checks every frozen decision the diff touches has a

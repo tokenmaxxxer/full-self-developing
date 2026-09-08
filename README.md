@@ -34,7 +34,7 @@ The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE
 | approval | `docs/issue-<n>/approvals/<hex>.md` | human in `docs/specs/approvers.md` |
 | acceptance | merge commit `ACCEPT issue-<n>/<hex>` | human |
 | rejection | `docs/issue-<n>/rejections/<hex>.md` | human |
-| what the repo is for | `docs/specs/northpole.md` — the human's verbatim words | orchestrator, appended |
+| what the repo is for | `docs/specs/northpole.md` — current intent, edited in place | orchestrator, on the human's word |
 | principles | `docs/decisions/*.md` with `status: frozen` + scope | human |
 | other decisions | `docs/decisions/*.md` `active` / `superseded` | either |
 

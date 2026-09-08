@@ -185,8 +185,8 @@ def cmd_board(a: argparse.Namespace) -> None:
             issues[m.group(1)]["records"].append((m.group(2), fm.get("type", "?"), fm.get("loop_state", "?")))
         elif m := re.match(r"docs/issue-(\d+)/approvals/([0-9a-f]{8})\.md$", f):
             issues[m.group(1)]["approved"].add(m.group(2))
-    # for-each-ref: `git branch --list` prefixes worktree-checked-out branches with `* `/`+ `
-    branches = set(git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*").splitlines())
+    # for-each-ref (pattern needs */*: * does not cross /): `git branch --list` prefixes worktree-checked-out branches with `* `/`+ `
+    branches = set(git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines())
     for n in sorted(issues, key=int):
         i = issues[n]
         print(f"issue-{n} [{i['state']}] {i['title']}")

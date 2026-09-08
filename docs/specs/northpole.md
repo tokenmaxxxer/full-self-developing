@@ -20,20 +20,22 @@ can take the wheel at any time, and is shown the route afterwards — but
 does not steer.
 
 - since 2026-09-08 · revised 2026-09-08
-- served by: `docs/specs/delegation.md` (a human-committed grant with expiry),
+- served by: `DELEGATE … UNTIL …` comment on the `delegation` issue,
   `otr approve/accept --via delegation`, `otr issue --origin` for deviations,
   the Drive section of `CLAUDE.md`. `GAP`: the drive runs inside one
   interactive session; nothing resumes it if that session ends mid-round
 
-## N1 — Git is the whole record
+## N1 — GitHub is the whole record
 
-Everything a future session or person needs is in the repository:
-requirement, work, rationale with evidence, approval, acceptance,
-rejection, and the repo's own direction. Nothing of record lives in a
-chat, a GitHub issue, or a label.
+Everything a future session or person needs is on GitHub: the
+requirement (issue), the work (PR), the rationale with evidence (record
+in the PR), approval (comment), acceptance (merge), rejection (close),
+delegation (comment), and the repo's own direction (this file and
+`docs/decisions/`). Nothing of record lives only in a chat or on one
+machine, and the orchestrator is GitHub's only writer.
 
-- since 2026-09-08 · revised 2026-09-08
-- served by: `docs/issue-<n>/`, `docs/decisions/`, this file; decision `git-only-ledger`
+- since 2026-09-08 · revised 2026-09-08 (was "git is the whole record" — a misreading; the human said GitHub)
+- served by: `tools/otr.py`, `docs/issue-<n>/reports/`, `docs/decisions/`, this file; decision `github-ledger`
 
 ## N2 — Work is delegated to subagents, judgment stays with the human
 

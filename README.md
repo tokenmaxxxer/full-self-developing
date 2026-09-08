@@ -1,46 +1,44 @@
 # full-self-developing
 
-On-the-record development with git as the only ledger. Adapted from
-[tokenmaxxxer/on-the-record](https://github.com/tokenmaxxxer/on-the-record)
-keeping two ideas — the git record system and delegation to subagents — and
-dropping roles, skills, sandboxing, and GitHub as a state store.
+Drive a stated need to a landed, recorded result. GitHub is the ledger, the
+orchestrator is its only writer, subagents do the work, the human supervises.
+Adapted from [tokenmaxxxer/on-the-record](https://github.com/tokenmaxxxer/on-the-record),
+keeping two ideas — the GitHub record system and delegation to subagents — and
+dropping roles, skills, sandboxing, and hooks.
 
 ## The loop
 
 ```
-human   otr issue "<title>"            → docs/issue-<n>/issue.md on main   (requirement)
-orch    otr directive <n> "<task>"     → prompt; orchestrator spawns a subagent with it
-agent   phase 1: proposal record        → branch issue-<n>/<hex>, docs/issue-<n>/reports/<hex>.md (proposed)
-human   otr approve <n> <hex>          → docs/issue-<n>/approvals/<hex>.md on main
-orch    otr directive <n> --phase delivery --session <hex>  → spawn again
-agent   phase 2: code + record          → same branch                        (loop_state: landed)
-human   otr accept <n> <hex>           → merge --no-ff into main
-   or   otr reject <n> <hex> "<why>"   → docs/issue-<n>/rejections/<hex>.md on main
+human   states a need                    orch  otr issue           → GitHub issue #n
+orch    otr directive n "<task>"         → prompt; Agent tool spawns a subagent (sonnet)
+agent   phase 1: proposal record         → local branch issue-n/<hex>, docs/issue-n/reports/<hex>.md
+orch    reads it, otr publish n <hex>    → push + PR
+human   approves                         orch  otr approve         → comment APPROVE issue-n/<hex>
+orch    otr directive n --phase delivery --session <hex> → same agent continues
+agent   phase 2: code + record (landed)  → same branch, local
+orch    reads it, otr publish            → PR updated
+human   accepts / rejects                orch  otr accept / reject → PR merged + issue closed / PR closed
 ```
 
-With a live delegation (`otr delegate --until +8h`, a human commit on `main`) the
-orchestrator runs that loop on its own — approving, accepting, and turning deviations
-into follow-up issues — and reports at the end; each delegated act is still its own
-commit marked `VIA DELEGATION`. `otr revoke` or expiry ends it. That drive is what the
-repository is for (`docs/specs/northpole.md` N0).
+With a live delegation (`otr delegate --until +8h` → a `DELEGATE … UNTIL …` comment on
+the pinned `delegation` issue) the orchestrator runs the loop on its own — approving,
+accepting, turning deviations into follow-up issues — and reports at the end; each
+delegated act is a comment or merge marked `VIA DELEGATION`. `otr revoke` or expiry
+ends it. That drive is what the repository is for (`docs/specs/northpole.md` N0).
 
-`otr board` reads the state of every issue from what is merged on `main`.
-`otr accept`/`reject` remove the session's worktree, branch and scratch; `otr clean [--all]`
-sweeps leftovers of finished (or, with `--all`, crashed) sessions. Nothing is written
-outside the repo.
-The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE.md`.
+`otr board` reads state from GitHub (open issues, PRs, approvals) plus each branch's record.
 
 ## Where each fact lives
 
 | fact | location | written by |
 |---|---|---|
-| requirement | `docs/issue-<n>/issue.md` | human |
-| work | branch `issue-<n>/<hex>`, worktree `runs/ws/`, scratch `runs/scratch/` | subagent |
-| rationale + evidence | `docs/issue-<n>/reports/<hex>.md` | subagent (that one only) |
-| approval | `docs/issue-<n>/approvals/<hex>.md` | human in `docs/specs/approvers.md` |
-| acceptance | merge commit `ACCEPT issue-<n>/<hex>` | human |
-| rejection | `docs/issue-<n>/rejections/<hex>.md` | human |
-| delegation | `docs/specs/delegation.md` (`status`, `until`, `issues`) | human |
+| requirement | GitHub issue #n | orchestrator, on the human's word |
+| work | branch `issue-<n>/<hex>` in a local worktree `runs/ws/` | subagent |
+| rationale + evidence | `docs/issue-<n>/reports/<hex>.md` on that branch | subagent (that one only) |
+| publication | push + PR | orchestrator, after reading |
+| approval | issue comment `APPROVE issue-<n>/<hex>` by a login in `docs/specs/approvers.md` | orchestrator, on the human's word |
+| acceptance / rejection | PR merged + issue closed / PR closed with reason | orchestrator, on the human's word |
+| delegation | `DELEGATE <issues|all> UNTIL <iso>` / `REVOKE` on the `delegation` issue | orchestrator, on the human's word |
 | what the repo is for | `docs/specs/northpole.md` — current intent, edited in place | orchestrator, on the human's word |
 | principles | `docs/decisions/*.md` with `status: frozen` + scope | human |
 | other decisions | `docs/decisions/*.md` `active` / `superseded` | either |
@@ -48,22 +46,25 @@ The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE
 ## Invariants
 
 1. Neither `otr` nor the orchestrator writes a record. They read state, delegate, and relay
-   human decisions as commits.
-2. A record is written by exactly one subagent — the one whose hex is in its filename.
+   human decisions to GitHub.
+2. Subagents never touch GitHub. They commit locally; `otr publish` is the only push, and it
+   happens after the orchestrator has read the branch.
+3. A record is written by exactly one subagent — the one whose hex is in its filename.
    Correcting another's record is done with `supersedes:` / `amends:` in your own.
-3. A subagent never lands, pushes, merges, or opens new work. Scope overflow goes under
+4. A subagent never lands, merges, or opens new work. Scope overflow goes under
    `## Deviations` in the record and the subagent stops.
-4. Every claim in a record cites the command and output that produced it.
-5. Judgment without a standard is `tools/record_lint.py` and the frozen-scope check in
+5. Every claim in a record cites the command and output that produced it.
+6. Judgment without a standard is `tools/record_lint.py` and the frozen-scope check in
    `otr accept` (`tools/decisions.py`); judgment with a standard is the human's
    approve / accept / reject.
-6. A frozen decision is touched only with `reaffirms <id>` in the record, or it is a
+7. A frozen decision is touched only with `reaffirms <id>` in the record, or it is a
    deviation and the subagent stops. Unfreezing is a human's superseding decision.
 
-These hold by convention and by the directive text, not by sandboxing — the source
-project's hooks and per-role environments were deliberately left out.
+These hold by convention and by the directive text, not by sandboxing.
 
 ## Setup
 
-`python3`, `git`. Put your git author email in
-`docs/specs/approvers.md`. Alias: `alias otr='python3 tools/otr.py'`.
+`python3`, `git`, `gh` (logged in) on PATH. The repo is whatever `origin` points at.
+Install as a plugin: `claude plugin marketplace add <this repo path or GitHub>` then
+`claude plugin install full-self-developing@full-self-developing`. In a new target repo run
+`otr init` once (approvers = your GitHub login, decisions README, empty north pole).

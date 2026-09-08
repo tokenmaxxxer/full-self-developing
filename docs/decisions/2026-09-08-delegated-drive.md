@@ -2,7 +2,7 @@
 id: delegated-drive
 status: frozen
 scope:
-  globs: ["docs/specs/delegation.md", "CLAUDE.md"]
+  globs: ["CLAUDE.md", "commands/run.md"]
   keywords: ["auto-approve", "auto-accept", "delegation", "via delegation"]
 ---
 
@@ -13,10 +13,10 @@ Date: 2026-09-08.
 ## Decision
 
 The orchestrator approves proposals and accepts deliveries on its own —
-no human turn — while a delegation is live: `docs/specs/delegation.md` on
-`main`, committed by an approver, with `until` and an issue scope. Every
-delegated act lands as its own commit marked `VIA DELEGATION`, so the human
-can audit and revert each one. Deviations become follow-up issues and are
+no human turn — while a delegation is live: a `DELEGATE <issues|all>
+UNTIL <iso>` comment by an approver on the pinned `delegation` issue, not
+followed by `REVOKE`, not expired. Every delegated act is its own comment
+or merge marked `VIA DELEGATION`, so the human can audit and revert each one. Deviations become follow-up issues and are
 driven the same way; nothing is handed back to the human except the stops
 named in `CLAUDE.md` (frozen-principle conflict, out-of-scope, three
 failures on one issue, a standard only the human holds).

@@ -1,37 +1,32 @@
 #!/usr/bin/env python3
-"""on-the-record, git-only edition.
+"""on-the-record, GitHub edition.
 
-Everything of record lives in git:
-  requirement  docs/issue-<n>/issue.md               (human, on main)
-  work         branch issue-<n>/<hex>                 (subagent)
-  rationale    docs/issue-<n>/reports/<hex>.md        (session, on its branch)
-  approval     docs/issue-<n>/approvals/<hex>.md      (human commit on main)
-  acceptance   merge --no-ff into main                (human)
-  rejection    docs/issue-<n>/rejections/<hex>.md     (human commit on main)
-  delegation   docs/specs/delegation.md               (human commit on main; lets the
-                                                       orchestrator approve/accept alone)
+GitHub is the ledger; the orchestrator is its only writer.
 
-This tool never writes a record. It reads state, prints the directive a
-subagent is spawned with (the orchestrator — the interactive Claude Code
-session — passes it to the Agent tool), and relays the human's decisions
-as commits.
+  requirement  GitHub issue #n                          (orchestrator relays the human)
+  work         branch issue-<n>/<hex>, local worktree   (subagent — never touches GitHub)
+  rationale    docs/issue-<n>/reports/<hex>.md          (subagent, on its branch)
+  publish      push + PR for issue-<n>/<hex>            (orchestrator, after reading it)
+  approval     issue comment `APPROVE issue-<n>/<hex>`  (orchestrator relays the human)
+  acceptance   PR merge; rejection: PR close + comment  (orchestrator relays the human)
+  delegation   comment `DELEGATE <scope> UNTIL <iso>` / `REVOKE` on the pinned
+               "delegation" issue                       (orchestrator relays the human)
+
+The repo is the one `origin` fetches from. Records, north pole and decisions
+are files in the repo and reach GitHub when their branch is pushed.
 
 Commands:
-  init                            give a target repo the files the loop reads
-  issue "<title>"                 open docs/issue-<n>/issue.md, commit
-  directive <n> "<task>" [--phase proposal|delivery] [--session <hex>]
-                                  print the subagent prompt (new hex for proposal)
-  board                           loop_state of every record on main
-  approve <n> <hex> ["<note>"] [--via delegation]   commit approval on main
-  accept <n> <hex> [--via delegation]               lint + principles + merge --no-ff
-  delegate --until <ISO|+Nh|+Nd> [--issues 3,4|all] ["<note>"]
-                                  grant standing delegation (human), commit on main
-  revoke                          end the delegation now, commit on main
-  delegation                      show whether a delegation is live
-  reject <n> <hex> "<reason>"     commit rejection, delete branch
-  lint [path]                     record lint
-  clean [--all]                   remove worktrees/branches/scratch of finished sessions
-  issue "<title>" --origin "<issue-n/hex deviation>"   open a follow-up issue from a deviation
+  init                                 approvers / decisions README / north pole / .gitignore
+  issue "<title>" --body "<md>" [--origin "<issue-n/hex deviation>"]   create the GitHub issue
+  directive <n> "<task>" [--phase proposal|delivery] [--session <hex>]  print the subagent prompt
+  publish <n> <hex>                    push the branch, open or update its PR
+  approve <n> <hex> ["<note>"] [--via delegation]
+  accept <n> <hex> [--via delegation]  gates + merge PR + close issue + local cleanup
+  reject <n> <hex> "<reason>"          close PR with the reason + local cleanup
+  delegate --until <ISO|+Nh|+Nd> [--issues 3,4|all] ["<note>"] / revoke / delegation
+  board                                open issues, their branches/PRs, record state
+  clean [--all]                        local leftovers of finished (or, --all, any) sessions
+  lint [path]                          record lint
 """
 from __future__ import annotations
 import argparse
@@ -42,15 +37,15 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 _top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
 if _top.returncode:
     sys.exit("otr: not inside a git repository")
-ROOT = Path(_top.stdout.strip())          # the target repository (cwd)
-TOOLS = Path(__file__).resolve().parent   # this plugin's tools, wherever installed
-PKG = TOOLS.parent                        # plugin root: docs/templates, docs/decisions/README.md
+ROOT = Path(_top.stdout.strip())
+TOOLS = Path(__file__).resolve().parent
+PKG = TOOLS.parent
 WS = ROOT / "runs" / "ws"
 MAIN = "main"
 
@@ -59,33 +54,71 @@ def git(*args: str, cwd: Path = ROOT, check: bool = True) -> str:
     return subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, check=check).stdout.strip()
 
 
+def gh(*args: str, check: bool = True) -> str:
+    r = subprocess.run(["gh", *args, "-R", REPO], cwd=ROOT, capture_output=True, text=True)
+    if r.returncode and check:
+        sys.exit(f"otr: gh {' '.join(args[:2])} failed: {r.stderr.strip()}")
+    return r.stdout.strip()
+
+
+def gh_json(*args: str):
+    out = gh(*args)
+    return json.loads(out) if out else None
+
+
+def _repo_from_origin() -> str:
+    url = git("remote", "get-url", "origin", check=False)
+    m = re.search(r"github\.com[:/]([^/]+/[^/.]+)", url)
+    if not m:
+        sys.exit("otr: origin is not a GitHub remote")
+    return m.group(1)
+
+
+REPO = _repo_from_origin()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
 def require_clean_main() -> None:
     if git("branch", "--show-current") != MAIN:
-        sys.exit(f"otr: run this on {MAIN} (current: {git('branch', '--show-current')})")
+        sys.exit(f"otr: run this on {MAIN}")
     if git("status", "--porcelain"):
         sys.exit("otr: working tree is dirty; commit or stash first")
 
 
-def approver_emails() -> set[str]:
+def approvers() -> set[str]:
     p = ROOT / "docs/specs/approvers.md"
-    return {l.strip() for l in p.read_text().splitlines() if "@" in l and not l.startswith("#")}
+    if not p.exists():
+        sys.exit("otr: docs/specs/approvers.md missing — run `otr init`")
+    return {l.strip().lstrip("@") for l in p.read_text().splitlines() if l.strip() and not l.startswith("#") and " " not in l.strip()}
+
+
+def me() -> str:
+    return subprocess.run(["gh", "api", "user", "--jq", ".login"], capture_output=True, text=True).stdout.strip()
 
 
 def require_approver() -> str:
-    email = git("config", "user.email")
-    if email not in approver_emails():
-        sys.exit(f"otr: {email} is not in docs/specs/approvers.md")
-    return email
+    login = me()
+    if login not in approvers():
+        sys.exit(f"otr: @{login} is not in docs/specs/approvers.md")
+    return login
+
+
+def frontmatter_of(text: str) -> dict[str, str]:
+    sys.path.insert(0, str(TOOLS))
+    from record_lint import parse_frontmatter
+    fm, _ = parse_frontmatter(text)
+    return fm or {}
 
 
 # ---------------------------------------------------------------- init
 
 def cmd_init(a: argparse.Namespace) -> None:
-    """Give the target repo the files the loop reads: approvers, decisions
-    README, an empty north pole, runs/ ignored. Never overwrites."""
-    require_clean_main() if git("rev-parse", "--verify", "-q", "HEAD", check=False) else None
-    email = git("config", "user.email")
+    login = me() or "<github-login>"
     made = []
+
     def put(rel: str, text: str) -> None:
         p = ROOT / rel
         if p.exists():
@@ -93,9 +126,11 @@ def cmd_init(a: argparse.Namespace) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(text)
         made.append(rel)
-    put("docs/specs/approvers.md", f"# Approvers\n\nOne git author email per line; only these may approve, accept, reject, delegate.\n\n{email}\n")
+
+    today = _now().date().isoformat()
+    put("docs/specs/approvers.md", f"# Approvers\n\nOne GitHub login per line. Only these may approve, accept, reject, delegate.\n\n{login}\n")
     put("docs/decisions/README.md", (PKG / "docs/decisions/README.md").read_text())
-    put("docs/specs/northpole.md", "# North pole\n\nWhat this repository is for, as currently understood. Edited in place as\nthinking changes; history is `git log -p` on this file.\n\n## N0 — \n\n- since " + date.today().isoformat() + " · revised " + date.today().isoformat() + "\n- served by: GAP\n")
+    put("docs/specs/northpole.md", f"# North pole\n\nWhat this repository is for, as currently understood. Edited in place as\nthinking changes; history is `git log -p` on this file.\n\n## N0 — \n\n- since {today} · revised {today}\n- served by: GAP\n")
     gi = ROOT / ".gitignore"
     if "runs/" not in (gi.read_text() if gi.exists() else ""):
         with gi.open("a") as f:
@@ -104,38 +139,59 @@ def cmd_init(a: argparse.Namespace) -> None:
     if made:
         git("add", *made)
         git("commit", "-q", "-m", "otr init: approvers, decisions, north pole")
-        print("initialised:", ", ".join(made))
+        print("initialised:", ", ".join(made), "— push when ready")
     else:
         print("already initialised")
 
 
 # ---------------------------------------------------------------- issue
 
-def next_issue_number() -> int:
-    nums = [int(m.group(1)) for p in (ROOT / "docs").glob("issue-*") if (m := re.match(r"issue-(\d+)$", p.name))]
-    return max(nums, default=0) + 1
+ISSUE_BODY = """\
+## Need
+
+{need}
+
+## Acceptance
+
+{acceptance}
+
+## Out of scope
+
+{out_of_scope}
+"""
 
 
 def cmd_issue(a: argparse.Namespace) -> None:
-    require_clean_main()
-    n = next_issue_number()
-    d = ROOT / f"docs/issue-{n}"
-    (d / "reports").mkdir(parents=True)
-    body = (PKG / "docs/templates/issue.md").read_text()
-    body = body.replace("<n>", str(n)).replace("<one line>", a.title).replace("<YYYY-MM-DD>", date.today().isoformat()).replace("<title>", a.title)
+    body = a.body
     if a.origin:
-        body = body.replace("state: open   # open | done | rejected", f"state: open   # open | done | rejected\norigin: {a.origin}")
-    (d / "issue.md").write_text(body)
-    (d / "reports/.gitkeep").write_text("")
-    git("add", str(d))
-    git("commit", "-q", "-m", f"issue-{n}: {a.title}")
-    print(f"docs/issue-{n}/issue.md — fill in Need/Acceptance, then commit and `otr directive`")
+        body = f"origin: {a.origin}\n\n" + body
+    n = gh("issue", "create", "--title", a.title, "--body", body).rsplit("/", 1)[-1]
+    print(f"issue #{n} — {REPO}/issues/{n}")
+
+
+def issue_view(n: int) -> dict:
+    d = gh_json("issue", "view", str(n), "--json", "number,title,body,state,comments")
+    if not d:
+        sys.exit(f"otr: issue #{n} not found in {REPO}")
+    return d
+
+
+def approval_comment(n: int, hexid: str) -> dict | None:
+    """The first APPROVE comment for this session by an approver, or None."""
+    ok = approvers()
+    for c in issue_view(n)["comments"]:
+        body = c["body"].strip()
+        if re.match(rf"^APPROVE issue-{n}/{hexid}\b", body) and c["author"]["login"] in ok:
+            return c
+    return None
 
 
 # ---------------------------------------------------------------- directive
 
 DIRECTIVE = """\
-You are a subagent bound to issue-{n}, session id {hex}, in repository {root}.
+You are a subagent bound to issue #{n}, session id {hex}, in repository {root}
+(GitHub: {repo}). You never talk to GitHub: no gh, no push, no PR. The orchestrator
+publishes your branch after reading it.
 
 FIRST, create your isolated working copy and branch (never work on main):
   {worktree_cmd}
@@ -144,9 +200,12 @@ All work and every command below happens inside that directory.
 Scratch files (probe repos, temp clones, logs) go ONLY under {root}/runs/scratch/issue-{n}-{hex}/
 — never under /tmp or $HOME. Delete that directory before your final reply.
 
-BEFORE ANYTHING ELSE read docs/specs/northpole.md (what this repo is for, verbatim) and every
+BEFORE ANYTHING ELSE read docs/specs/northpole.md (what this repo is for) and every
 `status: frozen` file in docs/decisions/ (`python3 {tools}/decisions.py` lists them). A change
 that works against either is a deviation to record, never a judgment call to make.
+
+ISSUE #{n} — {title}
+{body}
 
 TASK
 {task}
@@ -166,14 +225,13 @@ RECORD
 
 PRINCIPLES
 - Under ## Principles list `reaffirms <id>` for every frozen decision whose scope (path
-  globs / keywords) your diff or record touches, or `none touched`. `otr accept` refuses a
-  branch that touches a frozen scope without the matching line.
+  globs / keywords) your diff or record touches, or `none touched`.
 
 SCOPE
-- The requirement is docs/issue-{n}/issue.md. Do not widen it. If finishing needs something
+- The requirement is the issue text above. Do not widen it. If finishing needs something
   outside it (another change, a judgment call, a risk), write it under ## Deviations in your
   record and stop — never start new work yourself.
-- Never push, merge, switch to main, rebase, or delete branches. Landing is the human's act.
+- Never push, merge, switch to main, rebase, force anything, or delete branches.
 - Make a checkpoint commit BEFORE any long verification run; amend or follow up after.
 - Nobody answers questions mid-run. Decide, record why, continue.
 
@@ -183,32 +241,31 @@ the ## Deviations section verbatim (or "none").
 
 PHASE_RULES = {
     "proposal": """\
-- Deliver a proposal only: what you will change, how, and how each ## Acceptance item in
-  issue.md will be verified. No implementation beyond throwaway probes.
+- Deliver a proposal only: what you will change, how, and how each Acceptance item of the
+  issue will be verified. No implementation beyond throwaway probes.
 - Record: type: proposal, loop_state: proposed. Commit on your branch.""",
     "delivery": """\
-- The proposal on this branch was approved (docs/issue-{n}/approvals/{hex}.md on main, now
-  merged into your branch). Implement exactly it; deviations go under ## Deviations.
-- Record: type: implementation (or verification/repair as fits), loop_state: landed,
-  with ## Acceptance verification covering every item in issue.md.""",
+- The proposal on this branch was approved on the issue. Implement exactly it; deviations
+  go under ## Deviations.
+- Record: rewrite it as type: implementation (or verification/repair as fits),
+  loop_state: landed, with ## Acceptance verification covering every Acceptance item.""",
 }
 
 
 def cmd_directive(a: argparse.Namespace) -> None:
     n = a.issue
-    if not (ROOT / f"docs/issue-{n}/issue.md").exists():
-        sys.exit(f"otr: docs/issue-{n}/issue.md not found — run `otr issue` first")
+    issue = issue_view(n)
     hexid = a.session or secrets.token_hex(4)
     branch = f"issue-{n}/{hexid}"
     task = a.task
     if a.phase == "delivery":
-        if not (ROOT / f"docs/issue-{n}/approvals/{hexid}.md").exists():
-            sys.exit(f"otr: no approval on {MAIN} for {branch}; run `otr approve {n} {hexid}` first")
+        if not approval_comment(n, hexid):
+            sys.exit(f"otr: no `APPROVE issue-{n}/{hexid}` comment by an approver on #{n}")
         if not git("branch", "--list", branch):
-            sys.exit(f"otr: no branch {branch}")
+            sys.exit(f"otr: no local branch {branch}")
         task = task or f"Implement the approved proposal in docs/issue-{n}/reports/{hexid}.md."
         worktree_cmd = f"[ -d runs/ws/issue-{n}-{hexid} ] || git worktree add runs/ws/issue-{n}-{hexid} {branch}"
-        after_cd = f"\n  git merge --no-edit {MAIN}   # brings in the approval commit"
+        after_cd = f"\n  git merge --no-edit {MAIN}   # pick up anything landed since your proposal"
     else:
         if git("branch", "--list", branch):
             sys.exit(f"otr: branch {branch} already exists")
@@ -217,66 +274,80 @@ def cmd_directive(a: argparse.Namespace) -> None:
         worktree_cmd = f"git worktree add -b {branch} runs/ws/issue-{n}-{hexid} {MAIN}"
         after_cd = ""
     WS.mkdir(parents=True, exist_ok=True)
-    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, pkg=PKG, tools=TOOLS, worktree_cmd=worktree_cmd, after_cd=after_cd,
-                           task=task, phase=a.phase, phase_rules=PHASE_RULES[a.phase].format(n=n, hex=hexid)))
+    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, repo=REPO, tools=TOOLS, pkg=PKG,
+                           worktree_cmd=worktree_cmd, after_cd=after_cd, title=issue["title"],
+                           body=issue["body"].strip(), task=task, phase=a.phase,
+                           phase_rules=PHASE_RULES[a.phase]))
 
 
-# ---------------------------------------------------------------- board
+# ---------------------------------------------------------------- publish
 
-def frontmatter_of(text: str) -> dict[str, str]:
-    sys.path.insert(0, str(TOOLS))
-    from record_lint import parse_frontmatter
-    fm, _ = parse_frontmatter(text)
-    return fm or {}
+def record_on(branch: str, n: int, hexid: str) -> str:
+    return git("show", f"{branch}:docs/issue-{n}/reports/{hexid}.md", check=False)
 
 
-def cmd_board(a: argparse.Namespace) -> None:
-    files = git("ls-tree", "-r", "--name-only", MAIN).splitlines()
-    issues: dict[str, dict] = {}
-    for f in files:
-        if m := re.match(r"docs/issue-(\d+)/issue\.md$", f):
-            fm = frontmatter_of(git("show", f"{MAIN}:{f}"))
-            issues.setdefault(m.group(1), {"title": fm.get("title", ""), "state": fm.get("state", "?"), "records": [], "approved": set()})
-    for f in files:
-        if m := re.match(r"docs/issue-(\d+)/reports/([0-9a-f]{8})\.md$", f):
-            fm = frontmatter_of(git("show", f"{MAIN}:{f}"))
-            issues[m.group(1)]["records"].append((m.group(2), fm.get("type", "?"), fm.get("loop_state", "?")))
-        elif m := re.match(r"docs/issue-(\d+)/approvals/([0-9a-f]{8})\.md$", f):
-            issues[m.group(1)]["approved"].add(m.group(2))
-    # for-each-ref (pattern needs */*: * does not cross /): `git branch --list` prefixes worktree-checked-out branches with `* `/`+ `
-    branches = set(git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines())
-    for n in sorted(issues, key=int):
-        i = issues[n]
-        print(f"issue-{n} [{i['state']}] {i['title']}")
-        for hexid, typ, ls in i["records"]:
-            print(f"    {hexid}  {typ:<14} {ls}")
-        for b in sorted(b for b in branches if b.startswith(f"issue-{n}/")):
-            hexid = b.split("/")[1]
-            on_main = any(h == hexid for h, _, _ in i["records"])
-            merged = subprocess.run(["git", "merge-base", "--is-ancestor", b, MAIN], cwd=ROOT, capture_output=True).returncode == 0
-            if on_main and merged:
-                print(f"    branch {b}: landed")
-                continue
-            text = git("show", f"{b}:docs/issue-{n}/reports/{hexid}.md", check=False)
-            if text:
-                fm = frontmatter_of(text)
-                tag = f"{fm.get('type', '?')} {fm.get('loop_state', '?')}"
-            else:
-                tag = "no record"
-            if hexid in i["approved"]:
-                tag += ", approved"
-            print(f"    branch {b}: {tag}")
-    if not issues:
-        print("no issues")
+def pr_for(branch: str) -> dict | None:
+    prs = gh_json("pr", "list", "--head", branch, "--state", "all", "--json", "number,state,url,headRefName") or []
+    return prs[0] if prs else None
+
+
+def cmd_publish(a: argparse.Namespace) -> None:
+    n, hexid = a.issue, a.hex
+    branch = f"issue-{n}/{hexid}"
+    text = record_on(branch, n, hexid)
+    if not text:
+        sys.exit(f"otr: {branch} has no record at docs/issue-{n}/reports/{hexid}.md")
+    fm = frontmatter_of(text)
+    git("push", "-q", "-u", "origin", branch)
+    pr = pr_for(branch)
+    summary = (f"Closes #{n}\n\n**{fm.get('type', '?')} · {fm.get('loop_state', '?')}**\n\n"
+               f"{fm.get('verdict', '')}\n\nRecord: `docs/issue-{n}/reports/{hexid}.md`")
+    if pr and pr["state"] == "OPEN":
+        gh("pr", "edit", str(pr["number"]), "--body", summary)
+        gh("pr", "comment", str(pr["number"]), "--body", f"Updated: {fm.get('type', '?')} · {fm.get('loop_state', '?')} · {git('rev-parse', '--short', branch)}")
+        print(f"updated PR #{pr['number']} {pr['url']}")
+    else:
+        url = gh("pr", "create", "--base", MAIN, "--head", branch, "--title", f"issue-{n}/{hexid}: {issue_view(n)['title']}", "--body", summary)
+        print(f"opened PR {url}")
 
 
 # ---------------------------------------------------------------- delegation
 
-DELEG = ROOT / "docs/specs/delegation.md"
+def delegation_issue() -> int:
+    for i in gh_json("issue", "list", "--state", "all", "--limit", "200", "--json", "number,title") or []:
+        if i["title"] == "delegation":  # oldest wins; list is newest-first
+            found = i["number"]
+    if "found" in locals():
+        return found
+    url = gh("issue", "create", "--title", "delegation", "--body",
+             "Standing delegation lives here as comments: `DELEGATE <issues|all> UNTIL <iso>` and `REVOKE`. "
+             "The orchestrator reads the latest comment by an approver.")
+    return int(url.rsplit("/", 1)[-1])
 
 
-def _now() -> datetime:
-    return datetime.now(timezone.utc).replace(microsecond=0)
+def delegation() -> dict | None:
+    ok = approvers()
+    live = None
+    for c in issue_view(delegation_issue())["comments"]:
+        if c["author"]["login"] not in ok:
+            continue
+        body = c["body"].strip()
+        if body.startswith("REVOKE"):
+            live = None
+        elif m := re.match(r"^DELEGATE\s+(\S+)\s+UNTIL\s+(\S+)", body):
+            live = {"issues": m.group(1), "until": datetime.fromisoformat(m.group(2)), "by": c["author"]["login"]}
+    if live and _now() > live["until"]:
+        return None
+    return live
+
+
+def require_delegation(issue: int) -> dict:
+    d = delegation()
+    if not d:
+        sys.exit("otr: no live delegation — ask the human, or `otr delegate --until ...` on their word")
+    if d["issues"] != "all" and str(issue) not in d["issues"].split(","):
+        sys.exit(f"otr: delegation covers {d['issues']}, not #{issue} — ask the human")
+    return d
 
 
 def _parse_until(v: str) -> datetime:
@@ -286,166 +357,41 @@ def _parse_until(v: str) -> datetime:
     return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
 
 
-def delegation() -> dict | None:
-    """The live grant from main, or None. Read from main, never the tree,
-    so a revoke commit is honoured the moment it lands."""
-    text = git("show", f"{MAIN}:docs/specs/delegation.md", check=False)
-    if not text:
-        return None
-    fm = frontmatter_of(text)
-    if fm.get("status") != "live":
-        return None
-    until = datetime.fromisoformat(fm["until"])
-    if _now() > until:
-        return None
-    return {"until": until, "issues": fm.get("issues", "all"), "granted_by": fm.get("granted_by", "")}
-
-
-def require_delegation(issue: int) -> dict:
-    d = delegation()
-    if not d:
-        sys.exit("otr: no live delegation on main — ask the human, or `otr delegate --until ...`")
-    if d["issues"] != "all" and str(issue) not in [x.strip() for x in d["issues"].split(",")]:
-        sys.exit(f"otr: delegation covers issues {d['issues']}, not issue-{issue} — ask the human")
-    return d
-
-
 def cmd_delegate(a: argparse.Namespace) -> None:
-    require_clean_main()
-    email = require_approver()
-    until = _parse_until(a.until)
-    DELEG.write_text(f"""---
-status: live
-granted_by: {email}
-granted: {_now().isoformat()}
-until: {until.isoformat()}
-issues: {a.issues}
----
-
-# Standing delegation
-
-While `status: live` and before `until`, the orchestrator may run
-`otr approve --via delegation` and `otr accept --via delegation` on the
-issues named above without a human turn. Every such act still lands as
-its own commit naming this grant. `otr revoke` ends it; expiry ends it.
-
-{a.note or ''}
-""")
-    git("add", str(DELEG))
-    git("commit", "-q", "-m", f"DELEGATE {a.issues} UNTIL {until.isoformat()}")
-    print(f"delegation live for issues={a.issues} until {until.isoformat()}")
+    require_approver()
+    until = _parse_until(a.until).isoformat()
+    gh("issue", "comment", str(delegation_issue()), "--body", f"DELEGATE {a.issues} UNTIL {until}\n\n{a.note or ''}")
+    print(f"delegation live for {a.issues} until {until}")
 
 
 def cmd_revoke(a: argparse.Namespace) -> None:
-    require_clean_main()
     require_approver()
-    if not DELEG.exists():
-        sys.exit("otr: no delegation file")
-    t = re.sub(r"^status: \w+", "status: revoked", DELEG.read_text(), count=1, flags=re.M)
-    DELEG.write_text(t)
-    git("add", str(DELEG))
-    git("commit", "-q", "-m", f"REVOKE delegation at {_now().isoformat()}")
+    gh("issue", "comment", str(delegation_issue()), "--body", f"REVOKE at {_now().isoformat()}")
     print("delegation revoked")
 
 
 def cmd_delegation(a: argparse.Namespace) -> None:
     d = delegation()
-    print(f"live: issues={d['issues']} until {d['until'].isoformat()} (by {d['granted_by']})" if d else "none")
+    print(f"live: {d['issues']} until {d['until'].isoformat()} (by @{d['by']})" if d else "none")
 
 
 # ---------------------------------------------------------------- decisions
 
 def cmd_approve(a: argparse.Namespace) -> None:
-    require_clean_main()
-    email = require_approver()
-    via = f"delegation until {require_delegation(a.issue)['until'].isoformat()}" if a.via == "delegation" else "human turn"
+    login = require_approver()
     branch = f"issue-{a.issue}/{a.hex}"
-    if not git("branch", "--list", branch):
-        sys.exit(f"otr: no branch {branch}")
-    rec_path = f"docs/issue-{a.issue}/reports/{a.hex}.md"
-    sha = git("rev-parse", branch)
-    if not git("show", f"{branch}:{rec_path}", check=False):
-        sys.exit(f"otr: {branch} has no proposal record at {rec_path}")
-    p = ROOT / f"docs/issue-{a.issue}/approvals/{a.hex}.md"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f"""---
-issue: {a.issue}
-approves: {a.hex}
-proposal_sha: {sha}
-approver: {email}
-via: {via}
-date: {date.today().isoformat()}
----
-
-APPROVE issue-{a.issue}/{a.hex}
-
-{a.note or ''}
-""")
-    git("add", str(p))
-    git("commit", "-q", "-m", f"APPROVE issue-{a.issue}/{a.hex} at {sha[:8]}" + (" VIA DELEGATION" if a.via else ""))
-    print(f"approved {branch} at {sha[:8]} → otr directive {a.issue} --phase delivery --session {a.hex}")
-
-
-def cmd_accept(a: argparse.Namespace) -> None:
-    require_clean_main()
-    require_approver()
-    via = " VIA DELEGATION" if a.via == "delegation" else ""
+    if not record_on(branch, a.issue, a.hex) and not pr_for(branch):
+        sys.exit(f"otr: nothing published for {branch}")
+    via = ""
     if a.via == "delegation":
-        require_delegation(a.issue)
-    branch = f"issue-{a.issue}/{a.hex}"
-    rec_path = f"docs/issue-{a.issue}/reports/{a.hex}.md"
-    text = git("show", f"{branch}:{rec_path}", check=False)
-    if not text:
-        sys.exit(f"otr: {branch} has no record at {rec_path}")
-    fm = frontmatter_of(text)
-    if fm.get("loop_state") not in ("landed", "done"):
-        sys.exit(f"otr: record loop_state is {fm.get('loop_state')!r}, not landed/done")
-    ws = WS / f"issue-{a.issue}-{a.hex}"
-    WS.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(dir=str(WS)) as td:
-        subprocess.run(["git", "worktree", "add", "-q", "--detach", td, branch], cwd=ROOT, check=True)
-        try:
-            lint = subprocess.run([sys.executable, str(TOOLS / "record_lint.py"), rec_path], cwd=td, capture_output=True, text=True)
-        finally:
-            git("worktree", "remove", "--force", td, check=False)
-    if lint.returncode:
-        sys.exit("otr: record lint fails:\n" + lint.stdout)
-    _require_principles(branch, text)
-    git("merge", "--no-ff", "-q", "-m", f"ACCEPT issue-{a.issue}/{a.hex}{via}", branch)
-    _set_issue_state(a.issue, "done")
-    _cleanup(branch, ws)
-    print(f"accepted {branch} into {MAIN}")
-
-
-def cmd_reject(a: argparse.Namespace) -> None:
-    require_clean_main()
-    email = require_approver()
-    branch = f"issue-{a.issue}/{a.hex}"
-    sha = git("rev-parse", branch, check=False) or "unknown"
-    p = ROOT / f"docs/issue-{a.issue}/rejections/{a.hex}.md"
-    p.parent.mkdir(parents=True, exist_ok=True)
-    p.write_text(f"""---
-issue: {a.issue}
-rejects: {a.hex}
-branch_sha: {sha}
-approver: {email}
-date: {date.today().isoformat()}
----
-
-REJECT issue-{a.issue}/{a.hex}
-
-{a.reason}
-""")
-    git("add", str(p))
-    git("commit", "-q", "-m", f"REJECT issue-{a.issue}/{a.hex}: {a.reason[:60]}")
-    _cleanup(branch, WS / f"issue-{a.issue}-{a.hex}")
-    print(f"rejected {branch} (recorded at {sha[:8]} in {p.relative_to(ROOT)}); branch and worktree removed")
+        d = require_delegation(a.issue)
+        via = f" VIA DELEGATION until {d['until'].isoformat()}"
+    sha = git("rev-parse", "--short", branch, check=False) or "?"
+    gh("issue", "comment", str(a.issue), "--body", f"APPROVE issue-{a.issue}/{a.hex}{via}\n\nat {sha}\n\n{a.note or ''}")
+    print(f"approved {branch} at {sha} → otr directive {a.issue} --phase delivery --session {a.hex}")
 
 
 def _require_principles(branch: str, record_text: str) -> None:
-    """A branch touching a frozen decision's scope must carry `reaffirms <id>`
-    in its record (docs/decisions/README.md). Mechanical only: whether the
-    change actually honours the principle is the human's read of the diff."""
     sys.path.insert(0, str(TOOLS))
     import decisions
     paths = git("diff", "--name-only", f"{MAIN}...{branch}").splitlines()
@@ -456,52 +402,122 @@ def _require_principles(branch: str, record_text: str) -> None:
         sys.exit("otr: branch touches frozen decision(s) with no `reaffirms <id>` under ## Principles:\n" + "\n".join(lines))
 
 
-def _set_issue_state(n: int, state: str) -> None:
-    p = ROOT / f"docs/issue-{n}/issue.md"
-    t = re.sub(r"^state: \w+", f"state: {state}", p.read_text(), count=1, flags=re.M)
-    p.write_text(t)
-    git("add", str(p))
-    git("commit", "-q", "-m", f"issue-{n}: state {state}")
+def _lint_on_branch(branch: str, rec_path: str) -> None:
+    WS.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=str(WS)) as td:
+        subprocess.run(["git", "worktree", "add", "-q", "--detach", td, branch], cwd=ROOT, check=True)
+        try:
+            lint = subprocess.run([sys.executable, str(TOOLS / "record_lint.py"), rec_path], cwd=td, capture_output=True, text=True)
+        finally:
+            git("worktree", "remove", "--force", td, check=False)
+    if lint.returncode:
+        sys.exit("otr: record lint fails:\n" + lint.stdout)
 
 
-def _cleanup(branch: str, ws: Path, delete_branch: bool = True) -> None:
+def cmd_accept(a: argparse.Namespace) -> None:
+    require_clean_main()
+    require_approver()
+    n, hexid = a.issue, a.hex
+    branch = f"issue-{n}/{hexid}"
+    via = ""
+    if a.via == "delegation":
+        via = f" VIA DELEGATION until {require_delegation(n)['until'].isoformat()}"
+    text = record_on(branch, n, hexid)
+    if not text:
+        sys.exit(f"otr: {branch} has no record")
+    fm = frontmatter_of(text)
+    if fm.get("loop_state") not in ("landed", "done"):
+        sys.exit(f"otr: record loop_state is {fm.get('loop_state')!r}, not landed/done")
+    _lint_on_branch(branch, f"docs/issue-{n}/reports/{hexid}.md")
+    _require_principles(branch, text)
+    pr = pr_for(branch)
+    if not pr or pr["state"] != "OPEN":
+        sys.exit(f"otr: no open PR for {branch} — `otr publish {n} {hexid}` first")
+    git("push", "-q", "origin", branch)  # make sure the PR has the latest commits
+    gh("pr", "merge", str(pr["number"]), "--merge", "--delete-branch", "--subject", f"ACCEPT issue-{n}/{hexid}{via}")
+    git("pull", "-q", "--ff-only", "origin", MAIN)
+    if issue_view(n)["state"] == "OPEN":
+        gh("issue", "close", str(n), "--comment", f"ACCEPT issue-{n}/{hexid}{via} — PR #{pr['number']} merged")
+    _cleanup(branch, WS / f"issue-{n}-{hexid}")
+    print(f"accepted {branch}: PR #{pr['number']} merged, #{n} closed")
+
+
+def cmd_reject(a: argparse.Namespace) -> None:
+    require_approver()
+    n, hexid = a.issue, a.hex
+    branch = f"issue-{n}/{hexid}"
+    pr = pr_for(branch)
+    if pr and pr["state"] == "OPEN":
+        gh("pr", "close", str(pr["number"]), "--comment", f"REJECT issue-{n}/{hexid}\n\n{a.reason}", "--delete-branch")
+    else:
+        gh("issue", "comment", str(n), "--body", f"REJECT issue-{n}/{hexid} (never published)\n\n{a.reason}")
+    _cleanup(branch, WS / f"issue-{n}-{hexid}")
+    print(f"rejected {branch}")
+
+
+def _cleanup(branch: str, ws: Path) -> None:
     if ws.exists():
         git("worktree", "remove", "--force", str(ws), check=False)
     git("worktree", "prune")
     shutil.rmtree(ROOT / "runs" / "scratch" / ws.name, ignore_errors=True)
-    if delete_branch:
-        git("branch", "-D", branch, check=False)
+    git("branch", "-D", branch, check=False)
 
+
+# ---------------------------------------------------------------- board
+
+def cmd_board(a: argparse.Namespace) -> None:
+    issues = gh_json("issue", "list", "--state", "open", "--json", "number,title,comments") or []
+    prs = {p["headRefName"]: p for p in gh_json("pr", "list", "--state", "open", "--json", "number,headRefName,url") or []}
+    local = set(git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines())
+    ok = approvers()
+    for i in sorted(issues, key=lambda x: x["number"]):
+        if i["title"] == "delegation":
+            continue
+        n = i["number"]
+        print(f"#{n} {i['title']}")
+        approved = {m.group(1) for c in i["comments"] if c["author"]["login"] in ok
+                    for m in [re.match(rf"^APPROVE issue-{n}/([0-9a-f]{{8}})", c["body"].strip())] if m}
+        branches = sorted({b for b in local if b.startswith(f"issue-{n}/")} | {b for b in prs if b.startswith(f"issue-{n}/")})
+        for b in branches:
+            hexid = b.split("/")[1]
+            text = git("show", f"{b}:docs/issue-{n}/reports/{hexid}.md", check=False) if b in local else ""
+            fm = frontmatter_of(text) if text else {}
+            tag = f"{fm.get('type', '?')} {fm.get('loop_state', '?')}" if text else "no local record"
+            if b in prs:
+                tag += f", PR #{prs[b]['number']}"
+            if hexid in approved:
+                tag += ", approved"
+            print(f"    {b}: {tag}")
+    if not issues:
+        print("no open issues")
+    d = delegation()
+    print(f"delegation: {d['issues']} until {d['until'].isoformat()}" if d else "delegation: none")
+
+
+# ---------------------------------------------------------------- clean
 
 def cmd_clean(a: argparse.Namespace) -> None:
-    """Remove every leftover of finished (accepted or rejected) sessions, and
-    with --all also of in-flight ones (a crashed subagent leaves its worktree
-    and branch behind). Records on main are never touched."""
     git("worktree", "prune")
-    finished = set()
-    for f in git("ls-tree", "-r", "--name-only", MAIN).splitlines():
-        if m := re.match(r"docs/issue-(\d+)/(reports|rejections)/([0-9a-f]{8})\.md$", f):
-            finished.add(f"issue-{m.group(1)}-{m.group(3)}")
+    open_prs = {p["headRefName"] for p in gh_json("pr", "list", "--state", "open", "--json", "headRefName") or []}
     removed = []
-    for d in list((WS).glob("issue-*-*")) + list((ROOT / "runs" / "scratch").glob("issue-*-*")):
-        if a.all or d.name in finished:
+    for b in git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines():
+        n, hexid = b.split("/")
+        merged = subprocess.run(["git", "merge-base", "--is-ancestor", b, MAIN], cwd=ROOT).returncode == 0
+        if a.all or (merged and b not in open_prs):
+            _cleanup(b, WS / f"{n}-{hexid}")
+            removed.append(f"branch {b}")
+    for d in list(WS.glob("issue-*-*")) + list((ROOT / "runs" / "scratch").glob("issue-*-*")):
+        if a.all or f"{d.name[6:].replace('-', '/', 1)}" not in local_branches():
             if d.parent == WS:
                 git("worktree", "remove", "--force", str(d), check=False)
             shutil.rmtree(d, ignore_errors=True)
             removed.append(str(d.relative_to(ROOT)))
-    for b in git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines():
-        n, hexid = b.split("/")
-        if a.all or f"{n}-{hexid}" in finished:
-            git("branch", "-D", b, check=False)
-            removed.append(f"branch {b}")
-    for stray in list(WS.glob("*.json")) + list((ROOT / "runs").glob("*.log")):
-        stray.unlink()
-        removed.append(str(stray.relative_to(ROOT)))
     shutil.rmtree(ROOT / "tools" / "__pycache__", ignore_errors=True)
     print("\n".join(removed) if removed else "nothing to clean")
-    left = [p.name for p in WS.glob("issue-*-*")]
-    if left:
-        print("in flight (kept; use --all to force):", ", ".join(left))
+
+
+def local_branches() -> set[str]:
+    return set(git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines())
 
 
 def cmd_lint(a: argparse.Namespace) -> None:
@@ -514,16 +530,17 @@ def main() -> None:
     ap = argparse.ArgumentParser(prog="otr", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
     p = sp.add_parser("init"); p.set_defaults(fn=cmd_init)
-    p = sp.add_parser("issue"); p.add_argument("title"); p.add_argument("--origin"); p.set_defaults(fn=cmd_issue)
+    p = sp.add_parser("issue"); p.add_argument("title"); p.add_argument("--body", required=True); p.add_argument("--origin"); p.set_defaults(fn=cmd_issue)
     p = sp.add_parser("directive"); p.add_argument("issue", type=int); p.add_argument("task", nargs="?", default="")
     p.add_argument("--phase", choices=["proposal", "delivery"], default="proposal"); p.add_argument("--session"); p.set_defaults(fn=cmd_directive)
-    p = sp.add_parser("board"); p.set_defaults(fn=cmd_board)
+    p = sp.add_parser("publish"); p.add_argument("issue", type=int); p.add_argument("hex"); p.set_defaults(fn=cmd_publish)
     p = sp.add_parser("approve"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("note", nargs="?"); p.add_argument("--via", choices=["delegation"]); p.set_defaults(fn=cmd_approve)
     p = sp.add_parser("accept"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("--via", choices=["delegation"]); p.set_defaults(fn=cmd_accept)
+    p = sp.add_parser("reject"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("reason"); p.set_defaults(fn=cmd_reject)
     p = sp.add_parser("delegate"); p.add_argument("--until", required=True); p.add_argument("--issues", default="all"); p.add_argument("note", nargs="?"); p.set_defaults(fn=cmd_delegate)
     p = sp.add_parser("revoke"); p.set_defaults(fn=cmd_revoke)
     p = sp.add_parser("delegation"); p.set_defaults(fn=cmd_delegation)
-    p = sp.add_parser("reject"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("reason"); p.set_defaults(fn=cmd_reject)
+    p = sp.add_parser("board"); p.set_defaults(fn=cmd_board)
     p = sp.add_parser("clean"); p.add_argument("--all", action="store_true"); p.set_defaults(fn=cmd_clean)
     p = sp.add_parser("lint"); p.add_argument("path", nargs="?"); p.set_defaults(fn=cmd_lint)
     a = ap.parse_args()

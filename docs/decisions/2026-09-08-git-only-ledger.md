@@ -1,12 +1,14 @@
 ---
 id: git-only-ledger
-status: frozen
+status: superseded
 scope:
   globs: ["tools/otr.py", "docs/specs/**", "docs/templates/**"]
   keywords: ["github issue", "pull request", "label", "gh api", "gh pr", "gh issue"]
 ---
 
-# Git is the only ledger
+# Git is the only ledger — superseded by `github-ledger` (same day)
+
+Superseded: the human had said "GitHub", not "git". Kept as the cause of death.
 
 Date: 2026-09-08.
 

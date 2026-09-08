@@ -5,35 +5,39 @@ description: Orchestrator protocol — drive a need to a landed, recorded result
 # Orchestrator protocol
 
 This interactive session is the orchestrator. It talks to the human, keeps the
-record in git, and delegates work to subagents. It never writes a record and
-never does an issue's work itself.
+record on GitHub, and delegates work to subagents. It is the only thing that
+writes to GitHub; it never writes a record and never does an issue's work itself.
 
-`otr` = `python3 "$CLAUDE_PLUGIN_ROOT"/tools/otr.py`. In a repo without `docs/specs/approvers.md`, run `otr init` first (one commit: approvers, decisions README, empty north pole, `runs/` ignored).
+`otr` = `python3 "$CLAUDE_PLUGIN_ROOT"/tools/otr.py`.
+A repo without `docs/specs/approvers.md`: `otr init` first, then push.
 
 ## When the human states a need
-1. `otr issue "<title>"`, then fill `## Need` / `## Acceptance` / `## Out of scope`
-   in `docs/issue-<n>/issue.md` from the conversation, commit, and read it back
-   to the human for confirmation. The issue file is the requirement of record.
+1. Draft the issue from the conversation — `## Need`, `## Acceptance` (observable
+   conditions), `## Out of scope` — read it back once, then `otr issue "<title>"
+   --body "<md>"`. The GitHub issue is the requirement of record.
 
 ## Delegating (phase 1 — proposal)
-2. `otr directive <n> "<task>"` prints the prompt. Spawn one subagent (Agent tool,
-   general-purpose, `model: sonnet` unless the human names another) with that prompt verbatim. The subagent makes its own worktree
-   and branch `issue-<n>/<hex>`; run several in parallel for competing proposals.
-3. When it returns, read `git diff main...issue-<n>/<hex>` and the record, and
-   explain to the human: what it proposes, its `verdict:`, and its `## Deviations`.
-   Relay feedback by spawning again with the feedback as the task (same issue,
-   new hex) — the human never edits the branch.
+2. `otr directive <n> "<task>"` prints the prompt (it embeds the issue text). Spawn one
+   subagent (Agent tool, general-purpose, `model: sonnet` unless the human names another)
+   with that prompt verbatim. The subagent works on a local worktree/branch
+   `issue-<n>/<hex>` and never touches GitHub. Run several in parallel for competing proposals.
+3. When it returns, read `git diff main...issue-<n>/<hex>` and the record yourself. Then
+   `otr publish <n> <hex>` — pushes the branch and opens the PR with the record's verdict.
+   Explain to the human what it proposes, its `verdict:`, and its `## Deviations`.
+   Feedback → spawn again with the feedback as the task (same issue, new hex).
 
 ## Approval → phase 2 — delivery
-4. Human approves in conversation → `otr approve <n> <hex> "<note>"`.
-5. `otr directive <n> --phase delivery --session <hex>` → spawn again with it.
-6. Report the delivery the same way as step 3; if `loop_state` is not `landed`
-   or `## Deviations` is non-empty, say so before the human decides.
+4. Human approves in conversation → `otr approve <n> <hex> "<note>"` (an issue comment
+   `APPROVE issue-<n>/<hex>`).
+5. `otr directive <n> --phase delivery --session <hex>` → spawn again (same agent, via
+   SendMessage, keeps its context). Publish again when it returns.
+6. Report the delivery as in step 3; if `loop_state` is not `landed` or `## Deviations`
+   is non-empty, say so before the human decides.
 
 ## Acceptance / rejection
-7. `otr accept <n> <hex>` (lint + `merge --no-ff`) or `otr reject <n> <hex> "<why>"`.
-   Both remove the worktree, branch, and scratch dir. If a subagent died mid-run,
-   `otr clean --all` removes what it left; plain `otr clean` only touches finished sessions.
+7. `otr accept <n> <hex>` (lint + principles + PR merge + issue close + local cleanup) or
+   `otr reject <n> <hex> "<why>"` (PR closed with the reason + local cleanup). A dead
+   subagent's leftovers: `otr clean --all`.
 
 ## Direction of record
 - `docs/specs/northpole.md` states what the repo is for *as currently understood*. It is
@@ -44,25 +48,26 @@ never does an issue's work itself.
   editing; never reconstruct it from memory of the conversation.
 - A principle the human settles becomes `docs/decisions/<date>-<slug>.md` with
   `status: frozen` and a scope. Only the human unfreezes it (new superseding decision).
-- Before accepting, `otr accept` checks every frozen decision the diff touches has a
-  `reaffirms <id>` line; the orchestrator still reads the diff and says whether it
-  actually honours the principle — the check is mechanical, the judgment is not.
+- `otr accept` checks every frozen decision the diff touches has a `reaffirms <id>` line;
+  the orchestrator still reads the diff and says whether it actually honours the
+  principle — the check is mechanical, the judgment is not.
 
 ## Drive (full self-developing)
-The default mode once the human has granted a delegation (`otr delegation` says
-`live`). The grant is a conversational act, like approval: when the human says to
-drive ("가", "시작해", "알아서 해", "쭉 해"), run `otr delegate --until +8h` — or the
-duration/issues they named — in that same turn, then go. The loop above runs without
-a human turn:
+The default mode once the human has granted a delegation (`otr delegation` says `live`).
+The grant is a conversational act, like approval: when the human says to drive ("가",
+"시작해", "알아서 해", "쭉 해"), run `otr delegate --until +8h` — or the duration/issues
+they named — in that same turn, then go. It lands as a `DELEGATE … UNTIL …` comment on
+the pinned `delegation` issue. The loop above then runs without a human turn:
 
 1. Confirm: the human's stated need becomes an issue; read it back once, then go.
-2. Proposal returns → read the diff and record yourself. If the record lints, the
-   proposal covers every acceptance item, and `## Deviations` is empty or only names
+2. Proposal returns → read the diff and record yourself, publish. If the record lints,
+   the proposal covers every acceptance item, and `## Deviations` is empty or only names
    follow-ups → `otr approve <n> <hex> --via delegation` and spawn delivery, same turn.
-3. Delivery returns → same read. If `loop_state: landed`, acceptance verification cites
-   real commands, and `otr accept <n> <hex> --via delegation` passes its gates → accepted.
-4. Every `## Deviations` entry that is real work becomes `otr issue "<title>" --origin
-   "issue-<n>/<hex> deviation"` and is driven the same way. Nothing is handed back.
+3. Delivery returns → same read, publish. If `loop_state: landed`, acceptance verification
+   cites real commands, and `otr accept <n> <hex> --via delegation` passes its gates → accepted.
+4. Every `## Deviations` entry that is real work becomes `otr issue "<title>" --body
+   "<md>" --origin "issue-<n>/<hex> deviation"` and is driven the same way. Nothing is
+   handed back.
 5. Rejected or failed delivery → `otr reject` with the reason, then spawn a new session
    on the same issue with the reason as the task. Third failure on one issue → stop.
 
@@ -75,16 +80,18 @@ When the drive ends (all issues done, or a stop), report in four parts:
 **problem** each issue solved · **result** what landed (`otr board`) · **changed** the
 diff in one paragraph per issue · **limits** what remains, including open follow-ups
 and every `--via delegation` act taken, so the human can revert any of them
-(`REJECT` commit + `git revert` of the `ACCEPT` merge).
+(`gh pr revert` / `git revert` of the merge, and a `REJECT` comment).
 
 Without a live delegation, stop at each gate as before.
 
 ## Rules the orchestrator keeps
-- Approval, acceptance and rejection are relayed only after the human said so in
-  this conversation, or under a live delegation (`--via delegation`, which lands as
-  its own commit naming the grant) — never inferred from tone.
-- A deviation reported by a subagent becomes a new issue (step 1) or is dropped
-  by the human; the orchestrator does not fix it inline.
+- Approval, acceptance, rejection and delegation are relayed only after the human said so
+  in this conversation, or under a live delegation (`--via delegation`, which the comment
+  names) — never inferred from tone.
+- Nothing reaches GitHub that the orchestrator has not read: subagents commit locally,
+  `otr publish` is the only push.
+- A deviation reported by a subagent becomes a new issue or is dropped by the human; the
+  orchestrator does not fix it inline.
 - `otr board` is the only status source; do not narrate state from memory.
 - Nothing of a round lives outside the repo: worktrees in `runs/ws/`, subagent scratch in
   `runs/scratch/` (the directive forbids /tmp and $HOME), both git-ignored and removed on

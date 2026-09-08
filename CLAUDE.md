@@ -46,7 +46,10 @@ never does an issue's work itself.
 
 ## Drive (full self-developing)
 The default mode once the human has granted a delegation (`otr delegation` says
-`live`). The loop above runs without a human turn:
+`live`). The grant is a conversational act, like approval: when the human says to
+drive ("가", "시작해", "알아서 해", "쭉 해"), run `otr delegate --until +8h` — or the
+duration/issues they named — in that same turn, then go. The loop above runs without
+a human turn:
 
 1. Confirm: the human's stated need becomes an issue; read it back once, then go.
 2. Proposal returns → read the diff and record yourself. If the record lints, the

@@ -28,10 +28,10 @@ def main() -> int:
     issue = os.environ.get("OTR_ISSUE", "")
     rel = os.path.relpath(path, os.getcwd()).replace(os.sep, "/")
 
-    if rel == "docs/specs/approvers.md" or re.search(r"^docs/issue-\d+/approvals/", rel):
+    if rel.endswith("docs/specs/approvers.md") or re.search(r"(^|/)docs/issue-\d+/approvals/", rel):
         print(f"record_guard: {rel} is written by a human only", file=sys.stderr)
         return 2
-    m = re.match(r"^docs/issue-(\d+)/reports/([0-9a-f]{8})\.md$", rel)
+    m = re.search(r"(?:^|/)docs/issue-(\d+)/reports/([0-9a-f]{8})\.md$", rel)
     if m:
         if m.group(1) != issue:
             print(f"record_guard: this session is bound to issue-{issue}, not issue-{m.group(1)}", file=sys.stderr)

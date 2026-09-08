@@ -131,7 +131,7 @@ def cmd_init(a: argparse.Namespace) -> None:
 
     today = _now().date().isoformat()
     put("docs/specs/approvers.md", f"# Approvers\n\nOne GitHub login per line. Only these may approve, accept, reject, delegate.\nWritten by `otr init` from `gh api user`; add a line only for a person you mean.\n\n{login}\n")
-    put("docs/decisions/README.md", (PKG / "docs/decisions/README.md").read_text())
+    put("docs/decisions/README.md", (PKG / "templates/decisions-README.md").read_text())
     put("docs/specs/northpole.md", f"# North pole\n\nWhat this repository is for, as currently understood. Edited in place as\nthinking changes; history is `git log -p` on this file.\n\n## N0 — \n\n- since {today} · revised {today}\n- served by: GAP\n")
     gi = ROOT / ".gitignore"
     if "runs/" not in (gi.read_text() if gi.exists() else ""):
@@ -216,7 +216,7 @@ PHASE: {phase}
 {phase_rules}
 
 RECORD
-- Your record is docs/issue-{n}/reports/{hex}.md. Start from {pkg}/docs/templates/record.md
+- Your record is docs/issue-{n}/reports/{hex}.md. Start from {pkg}/templates/record.md
   (author: {hex}, issue: {n}). Write no other record. To correct another session's record,
   add `supersedes: <path>  # <reason>` or `amends: <path>#<section>  # <reason>` to yours.
 - Order: change the code, run the checks, THEN write the record once from the executed

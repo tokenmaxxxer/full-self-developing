@@ -26,6 +26,10 @@ accepting, turning deviations into follow-up issues — and reports at the end; 
 delegated act is a comment or merge marked `VIA DELEGATION`. `otr revoke` or expiry
 ends it. That drive is what the repository is for (`docs/specs/northpole.md` N0).
 
+Layout: `plugin/` is what gets installed (tools, protocol, hooks, templates); everything
+else in this repo is this repo's own ledger — north pole, decisions, records — and is
+never shipped to a consumer.
+
 `otr board` reads state from GitHub (open issues, PRs, approvals) plus each branch's record.
 
 ## Where each fact lives
@@ -54,8 +58,8 @@ ends it. That drive is what the repository is for (`docs/specs/northpole.md` N0)
 4. A subagent never lands, merges, or opens new work. Scope overflow goes under
    `## Deviations` in the record and the subagent stops.
 5. Every claim in a record cites the command and output that produced it.
-6. Judgment without a standard is `tools/record_lint.py` and the frozen-scope check in
-   `otr accept` (`tools/decisions.py`); judgment with a standard is the human's
+6. Judgment without a standard is `plugin/tools/record_lint.py` and the frozen-scope check
+   in `otr accept` (`plugin/tools/decisions.py`); judgment with a standard is the human's
    approve / accept / reject.
 7. A frozen decision is touched only with `reaffirms <id>` in the record, or it is a
    deviation and the subagent stops. Unfreezing is a human's superseding decision.

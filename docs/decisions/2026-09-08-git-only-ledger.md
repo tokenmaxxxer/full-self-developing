@@ -2,7 +2,7 @@
 id: git-only-ledger
 status: superseded
 scope:
-  globs: ["tools/otr.py", "docs/specs/**", "docs/templates/**"]
+  globs: ["plugin/tools/otr.py", "docs/specs/**", "plugin/templates/**"]
   keywords: ["github issue", "pull request", "label", "gh api", "gh pr", "gh issue"]
 ---
 

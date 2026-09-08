@@ -2,7 +2,7 @@
 id: delegated-drive
 status: frozen
 scope:
-  globs: ["CLAUDE.md", "commands/run.md"]
+  globs: ["CLAUDE.md", "plugin/commands/run.md"]
   keywords: ["auto-approve", "auto-accept", "delegation", "via delegation", "self-assigned", "fill the gap"]
 ---
 

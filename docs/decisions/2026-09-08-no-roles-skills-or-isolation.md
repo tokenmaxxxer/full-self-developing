@@ -2,7 +2,7 @@
 id: no-roles-skills-or-isolation
 status: frozen
 scope:
-  globs: ["tools/**", "CLAUDE.md", ".claude/**", "roles/**", "skills/**"]
+  globs: ["plugin/tools/**", "CLAUDE.md", ".claude/**", "roles/**", "skills/**"]
   keywords: ["role file", "rulebook", "skill axis", "sandbox", "hook", "settings.json", "claude -p"]
 ---
 

@@ -2,7 +2,7 @@
 id: github-ledger
 status: frozen
 scope:
-  globs: ["tools/otr.py", "docs/specs/**", "docs/templates/**", "CLAUDE.md", "commands/run.md"]
+  globs: ["plugin/tools/otr.py", "docs/specs/**", "plugin/templates/**", "CLAUDE.md", "plugin/commands/run.md"]
   keywords: ["local-only", "offline ledger", "approvals/", "rejections/", "issue.md"]
 ---
 

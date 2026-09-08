@@ -4,7 +4,7 @@
   "plugins": [
     {
       "name": "full-self-developing",
-      "source": "./",
+      "source": "./plugin",
       "description": "Drive a stated need to a landed, recorded result: git is the ledger, subagents do the work, the human supervises."
     }
   ]

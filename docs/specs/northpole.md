@@ -37,7 +37,7 @@ delegation (comment), and the repo's own direction (this file and
 machine, and the orchestrator is GitHub's only writer.
 
 - since 2026-09-08 · revised 2026-09-08 (was "git is the whole record" — a misreading; the human said GitHub)
-- served by: `tools/otr.py`, `docs/issue-<n>/reports/`, `docs/decisions/`, this file; decision `github-ledger`
+- served by: `plugin/tools/otr.py`, `docs/issue-<n>/reports/`, `docs/decisions/`, this file; decision `github-ledger`
 
 ## N2 — Work is delegated to subagents, judgment stays with the human
 

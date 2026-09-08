@@ -2,7 +2,7 @@
 issue: 2
 title: Second smoke test
 opened: 2026-09-08
-state: open   # open | done | rejected
+state: done   # open | done | rejected
 ---
 
 # issue-2 — Second smoke test

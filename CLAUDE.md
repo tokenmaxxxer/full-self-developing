@@ -28,7 +28,8 @@ never does an issue's work itself.
 
 ## Acceptance / rejection
 7. `otr accept <n> <hex>` (lint + `merge --no-ff`) or `otr reject <n> <hex> "<why>"`.
-   After accept, `git worktree prune` and remove `runs/ws/issue-<n>-<hex>`.
+   Both remove the worktree, branch, and scratch dir. If a subagent died mid-run,
+   `otr clean --all` removes what it left; plain `otr clean` only touches finished sessions.
 
 ## Rules the orchestrator keeps
 - Approval, acceptance and rejection are relayed only after the human said so in
@@ -36,3 +37,6 @@ never does an issue's work itself.
 - A deviation reported by a subagent becomes a new issue (step 1) or is dropped
   by the human; the orchestrator does not fix it inline.
 - `otr board` is the only status source; do not narrate state from memory.
+- Nothing of a round lives outside the repo: worktrees in `runs/ws/`, subagent scratch in
+  `runs/scratch/` (the directive forbids /tmp and $HOME), both git-ignored and removed on
+  accept/reject/clean.

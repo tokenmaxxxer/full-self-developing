@@ -19,6 +19,9 @@ human   otr accept <n> <hex>           → merge --no-ff into main
 ```
 
 `otr board` reads the state of every issue from what is merged on `main`.
+`otr accept`/`reject` remove the session's worktree, branch and scratch; `otr clean [--all]`
+sweeps leftovers of finished (or, with `--all`, crashed) sessions. Nothing is written
+outside the repo.
 The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE.md`.
 
 ## Where each fact lives
@@ -26,7 +29,7 @@ The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE
 | fact | location | written by |
 |---|---|---|
 | requirement | `docs/issue-<n>/issue.md` | human |
-| work | branch `issue-<n>/<hex>`, worktree `runs/ws/` | subagent |
+| work | branch `issue-<n>/<hex>`, worktree `runs/ws/`, scratch `runs/scratch/` | subagent |
 | rationale + evidence | `docs/issue-<n>/reports/<hex>.md` | subagent (that one only) |
 | approval | `docs/issue-<n>/approvals/<hex>.md` | human in `docs/specs/approvers.md` |
 | acceptance | merge commit `ACCEPT issue-<n>/<hex>` | human |

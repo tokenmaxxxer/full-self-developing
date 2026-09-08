@@ -23,12 +23,14 @@ Commands:
   accept <n> <hex>                lint + merge --no-ff into main
   reject <n> <hex> "<reason>"     commit rejection, delete branch
   lint [path]                     record lint
+  clean [--all]                   remove worktrees/branches/scratch of finished sessions
 """
 from __future__ import annotations
 import argparse
 import json
 import re
 import secrets
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -94,6 +96,8 @@ FIRST, create your isolated working copy and branch (never work on main):
   {worktree_cmd}
   cd runs/ws/issue-{n}-{hex}{after_cd}
 All work and every command below happens inside that directory.
+Scratch files (probe repos, temp clones, logs) go ONLY under {root}/runs/scratch/issue-{n}-{hex}/
+— never under /tmp or $HOME. Delete that directory before your final reply.
 
 TASK
 {task}
@@ -291,8 +295,8 @@ REJECT issue-{a.issue}/{a.hex}
 """)
     git("add", str(p))
     git("commit", "-q", "-m", f"REJECT issue-{a.issue}/{a.hex}: {a.reason[:60]}")
-    _cleanup(branch, WS / f"issue-{a.issue}-{a.hex}", delete_branch=False)
-    print(f"rejected {branch}; branch kept for reference (delete with git branch -D)")
+    _cleanup(branch, WS / f"issue-{a.issue}-{a.hex}")
+    print(f"rejected {branch} (recorded at {sha[:8]} in {p.relative_to(ROOT)}); branch and worktree removed")
 
 
 def _set_issue_state(n: int, state: str) -> None:
@@ -306,8 +310,41 @@ def _set_issue_state(n: int, state: str) -> None:
 def _cleanup(branch: str, ws: Path, delete_branch: bool = True) -> None:
     if ws.exists():
         git("worktree", "remove", "--force", str(ws), check=False)
+    git("worktree", "prune")
+    shutil.rmtree(ROOT / "runs" / "scratch" / ws.name, ignore_errors=True)
     if delete_branch:
-        git("branch", "-d", branch, check=False)
+        git("branch", "-D", branch, check=False)
+
+
+def cmd_clean(a: argparse.Namespace) -> None:
+    """Remove every leftover of finished (accepted or rejected) sessions, and
+    with --all also of in-flight ones (a crashed subagent leaves its worktree
+    and branch behind). Records on main are never touched."""
+    git("worktree", "prune")
+    finished = set()
+    for f in git("ls-tree", "-r", "--name-only", MAIN).splitlines():
+        if m := re.match(r"docs/issue-(\d+)/(reports|rejections)/([0-9a-f]{8})\.md$", f):
+            finished.add(f"issue-{m.group(1)}-{m.group(3)}")
+    removed = []
+    for d in list((WS).glob("issue-*-*")) + list((ROOT / "runs" / "scratch").glob("issue-*-*")):
+        if a.all or d.name in finished:
+            if d.parent == WS:
+                git("worktree", "remove", "--force", str(d), check=False)
+            shutil.rmtree(d, ignore_errors=True)
+            removed.append(str(d.relative_to(ROOT)))
+    for b in git("for-each-ref", "--format=%(refname:short)", "refs/heads/issue-*/*").splitlines():
+        n, hexid = b.split("/")
+        if a.all or f"{n}-{hexid}" in finished:
+            git("branch", "-D", b, check=False)
+            removed.append(f"branch {b}")
+    for stray in list(WS.glob("*.json")) + list((ROOT / "runs").glob("*.log")):
+        stray.unlink()
+        removed.append(str(stray.relative_to(ROOT)))
+    shutil.rmtree(ROOT / "tools" / "__pycache__", ignore_errors=True)
+    print("\n".join(removed) if removed else "nothing to clean")
+    left = [p.name for p in WS.glob("issue-*-*")]
+    if left:
+        print("in flight (kept; use --all to force):", ", ".join(left))
 
 
 def cmd_lint(a: argparse.Namespace) -> None:
@@ -326,6 +363,7 @@ def main() -> None:
     p = sp.add_parser("approve"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("note", nargs="?"); p.set_defaults(fn=cmd_approve)
     p = sp.add_parser("accept"); p.add_argument("issue", type=int); p.add_argument("hex"); p.set_defaults(fn=cmd_accept)
     p = sp.add_parser("reject"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("reason"); p.set_defaults(fn=cmd_reject)
+    p = sp.add_parser("clean"); p.add_argument("--all", action="store_true"); p.set_defaults(fn=cmd_clean)
     p = sp.add_parser("lint"); p.add_argument("path", nargs="?"); p.set_defaults(fn=cmd_lint)
     a = ap.parse_args()
     a.fn(a)

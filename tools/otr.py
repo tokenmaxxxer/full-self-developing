@@ -91,9 +91,8 @@ DIRECTIVE = """\
 You are a subagent bound to issue-{n}, session id {hex}, in repository {root}.
 
 FIRST, create your isolated working copy and branch (never work on main):
-  git worktree add runs/ws/issue-{n}-{hex} {branch_src}
-  cd runs/ws/issue-{n}-{hex}
-{branch_line}
+  {worktree_cmd}
+  cd runs/ws/issue-{n}-{hex}{after_cd}
 All work and every command below happens inside that directory.
 
 TASK
@@ -150,15 +149,17 @@ def cmd_directive(a: argparse.Namespace) -> None:
         if not git("branch", "--list", branch):
             sys.exit(f"otr: no branch {branch}")
         task = task or f"Implement the approved proposal in docs/issue-{n}/reports/{hexid}.md."
-        branch_src, branch_line = branch, f"  git merge --no-edit {MAIN}   # brings in the approval commit"
+        worktree_cmd = f"git worktree add runs/ws/issue-{n}-{hexid} {branch}"
+        after_cd = f"\n  git merge --no-edit {MAIN}   # brings in the approval commit"
     else:
         if git("branch", "--list", branch):
             sys.exit(f"otr: branch {branch} already exists")
         if not task:
             sys.exit("otr: a task is required for a proposal")
-        branch_src, branch_line = MAIN, f"  git checkout -b {branch}"
+        worktree_cmd = f"git worktree add -b {branch} runs/ws/issue-{n}-{hexid} {MAIN}"
+        after_cd = ""
     WS.mkdir(parents=True, exist_ok=True)
-    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, branch_src=branch_src, branch_line=branch_line,
+    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, worktree_cmd=worktree_cmd, after_cd=after_cd,
                            task=task, phase=a.phase, phase_rules=PHASE_RULES[a.phase].format(n=n, hex=hexid)))
 
 

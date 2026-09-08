@@ -23,6 +23,7 @@ Proposal only.
 
 ## Acceptance verification
 `python3 tools/hello.py` → hello
+`python3 tools/hello.py` → hello
 
 ## Next steps
 

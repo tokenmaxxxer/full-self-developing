@@ -149,7 +149,7 @@ def cmd_directive(a: argparse.Namespace) -> None:
         if not git("branch", "--list", branch):
             sys.exit(f"otr: no branch {branch}")
         task = task or f"Implement the approved proposal in docs/issue-{n}/reports/{hexid}.md."
-        worktree_cmd = f"git worktree add runs/ws/issue-{n}-{hexid} {branch}"
+        worktree_cmd = f"[ -d runs/ws/issue-{n}-{hexid} ] || git worktree add runs/ws/issue-{n}-{hexid} {branch}"
         after_cd = f"\n  git merge --no-edit {MAIN}   # brings in the approval commit"
     else:
         if git("branch", "--list", branch):

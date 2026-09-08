@@ -20,9 +20,10 @@ can take the wheel at any time, and is shown the route afterwards — but
 does not steer.
 
 - since 2026-09-08 · revised 2026-09-08
-- served by: N1–N4 are the preconditions; the drive itself is `GAP` —
-  today the orchestrator stops at every gate (confirm, approve, accept)
-  and waits for a human turn
+- served by: `docs/specs/delegation.md` (a human-committed grant with expiry),
+  `otr approve/accept --via delegation`, `otr issue --origin` for deviations,
+  the Drive section of `CLAUDE.md`. `GAP`: the drive runs inside one
+  interactive session; nothing resumes it if that session ends mid-round
 
 ## N1 — Git is the whole record
 

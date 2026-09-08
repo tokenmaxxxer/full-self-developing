@@ -8,6 +8,8 @@ Everything of record lives in git:
   approval     docs/issue-<n>/approvals/<hex>.md      (human commit on main)
   acceptance   merge --no-ff into main                (human)
   rejection    docs/issue-<n>/rejections/<hex>.md     (human commit on main)
+  delegation   docs/specs/delegation.md               (human commit on main; lets the
+                                                       orchestrator approve/accept alone)
 
 This tool never writes a record. It reads state, prints the directive a
 subagent is spawned with (the orchestrator — the interactive Claude Code
@@ -19,11 +21,16 @@ Commands:
   directive <n> "<task>" [--phase proposal|delivery] [--session <hex>]
                                   print the subagent prompt (new hex for proposal)
   board                           loop_state of every record on main
-  approve <n> <hex> ["<note>"]    commit approval on main
-  accept <n> <hex>                lint + merge --no-ff into main
+  approve <n> <hex> ["<note>"] [--via delegation]   commit approval on main
+  accept <n> <hex> [--via delegation]               lint + principles + merge --no-ff
+  delegate --until <ISO|+Nh|+Nd> [--issues 3,4|all] ["<note>"]
+                                  grant standing delegation (human), commit on main
+  revoke                          end the delegation now, commit on main
+  delegation                      show whether a delegation is live
   reject <n> <hex> "<reason>"     commit rejection, delete branch
   lint [path]                     record lint
   clean [--all]                   remove worktrees/branches/scratch of finished sessions
+  issue "<title>" --origin "<issue-n/hex deviation>"   open a follow-up issue from a deviation
 """
 from __future__ import annotations
 import argparse
@@ -34,7 +41,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
@@ -80,6 +87,8 @@ def cmd_issue(a: argparse.Namespace) -> None:
     (d / "reports").mkdir(parents=True)
     body = (ROOT / "docs/templates/issue.md").read_text()
     body = body.replace("<n>", str(n)).replace("<one line>", a.title).replace("<YYYY-MM-DD>", date.today().isoformat()).replace("<title>", a.title)
+    if a.origin:
+        body = body.replace("state: open   # open | done | rejected", f"state: open   # open | done | rejected\norigin: {a.origin}")
     (d / "issue.md").write_text(body)
     (d / "reports/.gitkeep").write_text("")
     git("add", str(d))
@@ -225,11 +234,95 @@ def cmd_board(a: argparse.Namespace) -> None:
         print("no issues")
 
 
+# ---------------------------------------------------------------- delegation
+
+DELEG = ROOT / "docs/specs/delegation.md"
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def _parse_until(v: str) -> datetime:
+    if m := re.match(r"^\+(\d+)([hd])$", v):
+        return _now() + timedelta(**{"hours" if m.group(2) == "h" else "days": int(m.group(1))})
+    d = datetime.fromisoformat(v)
+    return d if d.tzinfo else d.replace(tzinfo=timezone.utc)
+
+
+def delegation() -> dict | None:
+    """The live grant from main, or None. Read from main, never the tree,
+    so a revoke commit is honoured the moment it lands."""
+    text = git("show", f"{MAIN}:docs/specs/delegation.md", check=False)
+    if not text:
+        return None
+    fm = frontmatter_of(text)
+    if fm.get("status") != "live":
+        return None
+    until = datetime.fromisoformat(fm["until"])
+    if _now() > until:
+        return None
+    return {"until": until, "issues": fm.get("issues", "all"), "granted_by": fm.get("granted_by", "")}
+
+
+def require_delegation(issue: int) -> dict:
+    d = delegation()
+    if not d:
+        sys.exit("otr: no live delegation on main — ask the human, or `otr delegate --until ...`")
+    if d["issues"] != "all" and str(issue) not in [x.strip() for x in d["issues"].split(",")]:
+        sys.exit(f"otr: delegation covers issues {d['issues']}, not issue-{issue} — ask the human")
+    return d
+
+
+def cmd_delegate(a: argparse.Namespace) -> None:
+    require_clean_main()
+    email = require_approver()
+    until = _parse_until(a.until)
+    DELEG.write_text(f"""---
+status: live
+granted_by: {email}
+granted: {_now().isoformat()}
+until: {until.isoformat()}
+issues: {a.issues}
+---
+
+# Standing delegation
+
+While `status: live` and before `until`, the orchestrator may run
+`otr approve --via delegation` and `otr accept --via delegation` on the
+issues named above without a human turn. Every such act still lands as
+its own commit naming this grant. `otr revoke` ends it; expiry ends it.
+
+{a.note or ''}
+""")
+    git("add", str(DELEG))
+    git("commit", "-q", "-m", f"DELEGATE {a.issues} UNTIL {until.isoformat()}")
+    print(f"delegation live for issues={a.issues} until {until.isoformat()}")
+
+
+def cmd_revoke(a: argparse.Namespace) -> None:
+    require_clean_main()
+    require_approver()
+    if not DELEG.exists():
+        sys.exit("otr: no delegation file")
+    t = re.sub(r"^status: \w+", "status: revoked", DELEG.read_text(), count=1, flags=re.M)
+    DELEG.write_text(t)
+    git("add", str(DELEG))
+    git("commit", "-q", "-m", f"REVOKE delegation at {_now().isoformat()}")
+    print("delegation revoked")
+
+
+def cmd_delegation(a: argparse.Namespace) -> None:
+    d = delegation()
+    print(f"live: issues={d['issues']} until {d['until'].isoformat()} (by {d['granted_by']})" if d else "none")
+
+
 # ---------------------------------------------------------------- decisions
 
 def cmd_approve(a: argparse.Namespace) -> None:
     require_clean_main()
     email = require_approver()
+    via = f"delegation until {require_delegation(a.issue)['until'].isoformat()}" if a.via == "delegation" else "human turn"
     branch = f"issue-{a.issue}/{a.hex}"
     if not git("branch", "--list", branch):
         sys.exit(f"otr: no branch {branch}")
@@ -244,6 +337,7 @@ issue: {a.issue}
 approves: {a.hex}
 proposal_sha: {sha}
 approver: {email}
+via: {via}
 date: {date.today().isoformat()}
 ---
 
@@ -252,13 +346,16 @@ APPROVE issue-{a.issue}/{a.hex}
 {a.note or ''}
 """)
     git("add", str(p))
-    git("commit", "-q", "-m", f"APPROVE issue-{a.issue}/{a.hex} at {sha[:8]}")
+    git("commit", "-q", "-m", f"APPROVE issue-{a.issue}/{a.hex} at {sha[:8]}" + (" VIA DELEGATION" if a.via else ""))
     print(f"approved {branch} at {sha[:8]} → otr directive {a.issue} --phase delivery --session {a.hex}")
 
 
 def cmd_accept(a: argparse.Namespace) -> None:
     require_clean_main()
     require_approver()
+    via = " VIA DELEGATION" if a.via == "delegation" else ""
+    if a.via == "delegation":
+        require_delegation(a.issue)
     branch = f"issue-{a.issue}/{a.hex}"
     rec_path = f"docs/issue-{a.issue}/reports/{a.hex}.md"
     text = git("show", f"{branch}:{rec_path}", check=False)
@@ -278,7 +375,7 @@ def cmd_accept(a: argparse.Namespace) -> None:
     if lint.returncode:
         sys.exit("otr: record lint fails:\n" + lint.stdout)
     _require_principles(branch, text)
-    git("merge", "--no-ff", "-q", "-m", f"ACCEPT issue-{a.issue}/{a.hex}", branch)
+    git("merge", "--no-ff", "-q", "-m", f"ACCEPT issue-{a.issue}/{a.hex}{via}", branch)
     _set_issue_state(a.issue, "done")
     _cleanup(branch, ws)
     print(f"accepted {branch} into {MAIN}")
@@ -380,12 +477,15 @@ def cmd_lint(a: argparse.Namespace) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(prog="otr", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
-    p = sp.add_parser("issue"); p.add_argument("title"); p.set_defaults(fn=cmd_issue)
+    p = sp.add_parser("issue"); p.add_argument("title"); p.add_argument("--origin"); p.set_defaults(fn=cmd_issue)
     p = sp.add_parser("directive"); p.add_argument("issue", type=int); p.add_argument("task", nargs="?", default="")
     p.add_argument("--phase", choices=["proposal", "delivery"], default="proposal"); p.add_argument("--session"); p.set_defaults(fn=cmd_directive)
     p = sp.add_parser("board"); p.set_defaults(fn=cmd_board)
-    p = sp.add_parser("approve"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("note", nargs="?"); p.set_defaults(fn=cmd_approve)
-    p = sp.add_parser("accept"); p.add_argument("issue", type=int); p.add_argument("hex"); p.set_defaults(fn=cmd_accept)
+    p = sp.add_parser("approve"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("note", nargs="?"); p.add_argument("--via", choices=["delegation"]); p.set_defaults(fn=cmd_approve)
+    p = sp.add_parser("accept"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("--via", choices=["delegation"]); p.set_defaults(fn=cmd_accept)
+    p = sp.add_parser("delegate"); p.add_argument("--until", required=True); p.add_argument("--issues", default="all"); p.add_argument("note", nargs="?"); p.set_defaults(fn=cmd_delegate)
+    p = sp.add_parser("revoke"); p.set_defaults(fn=cmd_revoke)
+    p = sp.add_parser("delegation"); p.set_defaults(fn=cmd_delegation)
     p = sp.add_parser("reject"); p.add_argument("issue", type=int); p.add_argument("hex"); p.add_argument("reason"); p.set_defaults(fn=cmd_reject)
     p = sp.add_parser("clean"); p.add_argument("--all", action="store_true"); p.set_defaults(fn=cmd_clean)
     p = sp.add_parser("lint"); p.add_argument("path", nargs="?"); p.set_defaults(fn=cmd_lint)

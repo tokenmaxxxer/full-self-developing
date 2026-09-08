@@ -18,6 +18,12 @@ human   otr accept <n> <hex>           → merge --no-ff into main
    or   otr reject <n> <hex> "<why>"   → docs/issue-<n>/rejections/<hex>.md on main
 ```
 
+With a live delegation (`otr delegate --until +8h`, a human commit on `main`) the
+orchestrator runs that loop on its own — approving, accepting, and turning deviations
+into follow-up issues — and reports at the end; each delegated act is still its own
+commit marked `VIA DELEGATION`. `otr revoke` or expiry ends it. That drive is what the
+repository is for (`docs/specs/northpole.md` N0).
+
 `otr board` reads the state of every issue from what is merged on `main`.
 `otr accept`/`reject` remove the session's worktree, branch and scratch; `otr clean [--all]`
 sweeps leftovers of finished (or, with `--all`, crashed) sessions. Nothing is written
@@ -34,6 +40,7 @@ The orchestrator is the interactive Claude Code session; its protocol is `CLAUDE
 | approval | `docs/issue-<n>/approvals/<hex>.md` | human in `docs/specs/approvers.md` |
 | acceptance | merge commit `ACCEPT issue-<n>/<hex>` | human |
 | rejection | `docs/issue-<n>/rejections/<hex>.md` | human |
+| delegation | `docs/specs/delegation.md` (`status`, `until`, `issues`) | human |
 | what the repo is for | `docs/specs/northpole.md` — current intent, edited in place | orchestrator, on the human's word |
 | principles | `docs/decisions/*.md` with `status: frozen` + scope | human |
 | other decisions | `docs/decisions/*.md` `active` / `superseded` | either |

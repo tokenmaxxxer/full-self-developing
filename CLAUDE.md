@@ -44,9 +44,38 @@ never does an issue's work itself.
   `reaffirms <id>` line; the orchestrator still reads the diff and says whether it
   actually honours the principle — the check is mechanical, the judgment is not.
 
+## Drive (full self-developing)
+The default mode once the human has granted a delegation (`otr delegation` says
+`live`). The loop above runs without a human turn:
+
+1. Confirm: the human's stated need becomes an issue; read it back once, then go.
+2. Proposal returns → read the diff and record yourself. If the record lints, the
+   proposal covers every acceptance item, and `## Deviations` is empty or only names
+   follow-ups → `otr approve <n> <hex> --via delegation` and spawn delivery, same turn.
+3. Delivery returns → same read. If `loop_state: landed`, acceptance verification cites
+   real commands, and `otr accept <n> <hex> --via delegation` passes its gates → accepted.
+4. Every `## Deviations` entry that is real work becomes `otr issue "<title>" --origin
+   "issue-<n>/<hex> deviation"` and is driven the same way. Nothing is handed back.
+5. Rejected or failed delivery → `otr reject` with the reason, then spawn a new session
+   on the same issue with the reason as the task. Third failure on one issue → stop.
+
+Stop and ask the human only when: `otr accept` refuses on a frozen principle; the
+delegation does not cover the issue or has expired; an issue has failed three sessions;
+or the change needs a standard only the human holds (product taste, spend, outward
+effect). Say which of these it is.
+
+When the drive ends (all issues done, or a stop), report in four parts:
+**problem** each issue solved · **result** what landed (`otr board`) · **changed** the
+diff in one paragraph per issue · **limits** what remains, including open follow-ups
+and every `--via delegation` act taken, so the human can revert any of them
+(`REJECT` commit + `git revert` of the `ACCEPT` merge).
+
+Without a live delegation, stop at each gate as before.
+
 ## Rules the orchestrator keeps
 - Approval, acceptance and rejection are relayed only after the human said so in
-  this conversation — never inferred.
+  this conversation, or under a live delegation (`--via delegation`, which lands as
+  its own commit naming the grant) — never inferred from tone.
 - A deviation reported by a subagent becomes a new issue (step 1) or is dropped
   by the human; the orchestrator does not fix it inline.
 - `otr board` is the only status source; do not narrate state from memory.

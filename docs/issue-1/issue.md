@@ -2,7 +2,7 @@
 issue: 1
 title: Smoke-test the loop
 opened: 2026-09-08
-state: open   # open | done | rejected
+state: done   # open | done | rejected
 ---
 
 # issue-1 — Smoke-test the loop

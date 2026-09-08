@@ -55,7 +55,7 @@ def git(*args: str, cwd: Path = ROOT, check: bool = True) -> str:
 
 
 def gh(*args: str, check: bool = True) -> str:
-    r = subprocess.run(["gh", *args, "-R", REPO], cwd=ROOT, capture_output=True, text=True)
+    r = subprocess.run(["gh", *args, "-R", str(REPO)], cwd=ROOT, capture_output=True, text=True)
     if r.returncode and check:
         sys.exit(f"otr: gh {' '.join(args[:2])} failed: {r.stderr.strip()}")
     return r.stdout.strip()
@@ -74,7 +74,16 @@ def _repo_from_origin() -> str:
     return m.group(1)
 
 
-REPO = _repo_from_origin()
+class _Lazy(str):
+    """Resolved on first use so `otr init`/`lint` work before origin exists."""
+    def __new__(cls):
+        return super().__new__(cls, "")
+    def __str__(self):
+        return _repo_from_origin()
+    __repr__ = __str__
+
+
+REPO = _Lazy()
 
 
 def _now() -> datetime:
@@ -168,13 +177,13 @@ def cmd_issue(a: argparse.Namespace) -> None:
     if a.origin:
         body = f"origin: {a.origin}\n\n" + body
     n = gh("issue", "create", "--title", a.title, "--body", body).rsplit("/", 1)[-1]
-    print(f"issue #{n} — {REPO}/issues/{n}")
+    print(f"issue #{n} — https://github.com/{REPO}/issues/{n}")
 
 
 def issue_view(n: int) -> dict:
     d = gh_json("issue", "view", str(n), "--json", "number,title,body,state,comments")
     if not d:
-        sys.exit(f"otr: issue #{n} not found in {REPO}")
+        sys.exit(f"otr: issue #{n} not found in {REPO!s}")
     return d
 
 
@@ -276,7 +285,7 @@ def cmd_directive(a: argparse.Namespace) -> None:
         worktree_cmd = f"git worktree add -b {branch} runs/ws/issue-{n}-{hexid} {MAIN}"
         after_cd = ""
     WS.mkdir(parents=True, exist_ok=True)
-    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, repo=REPO, tools=TOOLS, pkg=PKG,
+    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, repo=str(REPO), tools=TOOLS, pkg=PKG,
                            worktree_cmd=worktree_cmd, after_cd=after_cd, title=issue["title"],
                            body=issue["body"].strip(), task=task, phase=a.phase,
                            phase_rules=PHASE_RULES[a.phase]))

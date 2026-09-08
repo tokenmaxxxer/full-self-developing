@@ -17,6 +17,7 @@ session — passes it to the Agent tool), and relays the human's decisions
 as commits.
 
 Commands:
+  init                            give a target repo the files the loop reads
   issue "<title>"                 open docs/issue-<n>/issue.md, commit
   directive <n> "<task>" [--phase proposal|delivery] [--session <hex>]
                                   print the subagent prompt (new hex for proposal)
@@ -44,8 +45,12 @@ import tempfile
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
-ROOT = Path(subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True, check=True).stdout.strip())
-TOOLS = ROOT / "tools"
+_top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+if _top.returncode:
+    sys.exit("otr: not inside a git repository")
+ROOT = Path(_top.stdout.strip())          # the target repository (cwd)
+TOOLS = Path(__file__).resolve().parent   # this plugin's tools, wherever installed
+PKG = TOOLS.parent                        # plugin root: docs/templates, docs/decisions/README.md
 WS = ROOT / "runs" / "ws"
 MAIN = "main"
 
@@ -73,6 +78,37 @@ def require_approver() -> str:
     return email
 
 
+# ---------------------------------------------------------------- init
+
+def cmd_init(a: argparse.Namespace) -> None:
+    """Give the target repo the files the loop reads: approvers, decisions
+    README, an empty north pole, runs/ ignored. Never overwrites."""
+    require_clean_main() if git("rev-parse", "--verify", "-q", "HEAD", check=False) else None
+    email = git("config", "user.email")
+    made = []
+    def put(rel: str, text: str) -> None:
+        p = ROOT / rel
+        if p.exists():
+            return
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(text)
+        made.append(rel)
+    put("docs/specs/approvers.md", f"# Approvers\n\nOne git author email per line; only these may approve, accept, reject, delegate.\n\n{email}\n")
+    put("docs/decisions/README.md", (PKG / "docs/decisions/README.md").read_text())
+    put("docs/specs/northpole.md", "# North pole\n\nWhat this repository is for, as currently understood. Edited in place as\nthinking changes; history is `git log -p` on this file.\n\n## N0 — \n\n- since " + date.today().isoformat() + " · revised " + date.today().isoformat() + "\n- served by: GAP\n")
+    gi = ROOT / ".gitignore"
+    if "runs/" not in (gi.read_text() if gi.exists() else ""):
+        with gi.open("a") as f:
+            f.write("runs/\n")
+        made.append(".gitignore")
+    if made:
+        git("add", *made)
+        git("commit", "-q", "-m", "otr init: approvers, decisions, north pole")
+        print("initialised:", ", ".join(made))
+    else:
+        print("already initialised")
+
+
 # ---------------------------------------------------------------- issue
 
 def next_issue_number() -> int:
@@ -85,7 +121,7 @@ def cmd_issue(a: argparse.Namespace) -> None:
     n = next_issue_number()
     d = ROOT / f"docs/issue-{n}"
     (d / "reports").mkdir(parents=True)
-    body = (ROOT / "docs/templates/issue.md").read_text()
+    body = (PKG / "docs/templates/issue.md").read_text()
     body = body.replace("<n>", str(n)).replace("<one line>", a.title).replace("<YYYY-MM-DD>", date.today().isoformat()).replace("<title>", a.title)
     if a.origin:
         body = body.replace("state: open   # open | done | rejected", f"state: open   # open | done | rejected\norigin: {a.origin}")
@@ -109,7 +145,7 @@ Scratch files (probe repos, temp clones, logs) go ONLY under {root}/runs/scratch
 — never under /tmp or $HOME. Delete that directory before your final reply.
 
 BEFORE ANYTHING ELSE read docs/specs/northpole.md (what this repo is for, verbatim) and every
-`status: frozen` file in docs/decisions/ (`python3 tools/decisions.py` lists them). A change
+`status: frozen` file in docs/decisions/ (`python3 {tools}/decisions.py` lists them). A change
 that works against either is a deviation to record, never a judgment call to make.
 
 TASK
@@ -119,13 +155,13 @@ PHASE: {phase}
 {phase_rules}
 
 RECORD
-- Your record is docs/issue-{n}/reports/{hex}.md. Start from docs/templates/record.md
+- Your record is docs/issue-{n}/reports/{hex}.md. Start from {pkg}/docs/templates/record.md
   (author: {hex}, issue: {n}). Write no other record. To correct another session's record,
   add `supersedes: <path>  # <reason>` or `amends: <path>#<section>  # <reason>` to yours.
 - Order: change the code, run the checks, THEN write the record once from the executed
   results. Every claim cites the command and its output under ## Evidence. Bare counts
   ("all tests pass") without the command are not evidence.
-- Before your final commit run `python3 tools/record_lint.py docs/issue-{n}/reports/{hex}.md`
+- Before your final commit run `python3 {tools}/record_lint.py docs/issue-{n}/reports/{hex}.md`
   and fix everything it prints. Commit everything; leave no uncommitted changes.
 
 PRINCIPLES
@@ -181,7 +217,7 @@ def cmd_directive(a: argparse.Namespace) -> None:
         worktree_cmd = f"git worktree add -b {branch} runs/ws/issue-{n}-{hexid} {MAIN}"
         after_cd = ""
     WS.mkdir(parents=True, exist_ok=True)
-    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, worktree_cmd=worktree_cmd, after_cd=after_cd,
+    print(DIRECTIVE.format(n=n, hex=hexid, root=ROOT, pkg=PKG, tools=TOOLS, worktree_cmd=worktree_cmd, after_cd=after_cd,
                            task=task, phase=a.phase, phase_rules=PHASE_RULES[a.phase].format(n=n, hex=hexid)))
 
 
@@ -477,6 +513,7 @@ def cmd_lint(a: argparse.Namespace) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(prog="otr", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sp = ap.add_subparsers(dest="cmd", required=True)
+    p = sp.add_parser("init"); p.set_defaults(fn=cmd_init)
     p = sp.add_parser("issue"); p.add_argument("title"); p.add_argument("--origin"); p.set_defaults(fn=cmd_issue)
     p = sp.add_parser("directive"); p.add_argument("issue", type=int); p.add_argument("task", nargs="?", default="")
     p.add_argument("--phase", choices=["proposal", "delivery"], default="proposal"); p.add_argument("--session"); p.set_defaults(fn=cmd_directive)

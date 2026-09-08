@@ -16,7 +16,9 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from record_lint import parse_frontmatter  # noqa: E402
 
-ROOT = Path(__file__).resolve().parents[1]
+import subprocess
+_top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
+ROOT = Path(_top.stdout.strip()) if _top.returncode == 0 else Path.cwd()   # the target repo
 DIR = ROOT / "docs" / "decisions"
 STATUSES = {"frozen", "active", "superseded"}
 

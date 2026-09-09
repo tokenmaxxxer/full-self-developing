@@ -24,6 +24,12 @@ upstream: []            # [{path: <record or file>, sha: <commit>}]
 <For each frozen decision in docs/decisions/ whose scope your diff or this record
 touches: `reaffirms <id>` — one per line. Write `none touched` otherwise.>
 
+## Judgment
+
+<Methods considered, one line each, the smallest marked `(smallest)`; the one chosen;
+why, naming the Priority or Watch for item that decided it. `none` if there was only
+one method to choose from.>
+
 ## Acceptance
 
 <Proposal record: propose it here, or, if the issue already has one, keep or refine it

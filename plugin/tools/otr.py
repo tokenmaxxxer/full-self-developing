@@ -300,10 +300,16 @@ PHASE_RULES = {
   be verified. If the issue above already has `## Acceptance` / `## Out of scope`, keep
   or refine them there instead and say which — the human is never asked to write them
   up front, so their absence in the issue is the normal case, not an error.
+- Fill `## Judgment`: the methods you considered (smallest marked), the one you chose,
+  and why — name the Priority or Watch for item that decided it. Only one method was
+  ever possible → write `none`.
 - Record: type: proposal, loop_state: proposed. Commit on your branch.""",
     "delivery": """\
 - The proposal on this branch was approved on the issue, which by then carries the
   approved `## Acceptance`. Implement exactly it; deviations go under ## Deviations.
+- If delivery changed the method chosen in `## Judgment` (a Watch for item forced a
+  course change, or the approved feedback picked a different method), update that
+  section to say so; otherwise carry it over unchanged.
 - Record: rewrite it as type: implementation (or verification/repair as fits),
   loop_state: landed, with ## Acceptance verification covering every item in the
   issue's current `## Acceptance` section.""",
@@ -356,10 +362,12 @@ def cmd_publish(a: argparse.Namespace) -> None:
     if not text:
         sys.exit(f"otr: {branch} has no record at docs/issue-{n}/reports/{hexid}.md")
     fm = frontmatter_of(text)
+    judgment = extract_section(record_body_of(text), "## Judgment")
     git("push", "-q", "-u", "origin", branch)
     pr = pr_for(branch)
     summary = (f"Closes #{n}\n\n**{fm.get('type', '?')} · {fm.get('loop_state', '?')}**\n\n"
-               f"{fm.get('verdict', '')}\n\nRecord: `docs/issue-{n}/reports/{hexid}.md`")
+               f"{fm.get('verdict', '')}\n\n**Judgment**\n\n{judgment or 'none'}"
+               f"\n\nRecord: `docs/issue-{n}/reports/{hexid}.md`")
     if pr and pr["state"] == "OPEN":
         gh("pr", "edit", str(pr["number"]), "--body", summary)
         gh("pr", "comment", str(pr["number"]), "--body", f"Updated: {fm.get('type', '?')} · {fm.get('loop_state', '?')} · {git('rev-parse', '--short', branch)}")

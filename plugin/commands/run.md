@@ -15,9 +15,9 @@ approver from `gh api user` — the logged-in account of *this* machine. Never c
 a wrong login there silently hands approval to someone else.
 
 ## When the human states a need
-1. Draft the issue from the conversation — `## Need`, `## Acceptance` (observable
-   conditions), `## Out of scope` — read it back once, then `otr issue "<title>"
-   --body "<md>"`. The GitHub issue is the requirement of record.
+1. Draft the issue from the conversation — `## Problem` and `## Watch for` — read it back
+   once, then `otr issue "<title>" --body "<md>"`. The GitHub issue is the requirement of
+   record; Acceptance and Out of scope arrive with the approved proposal.
 
 ## Delegating (phase 1 — proposal)
 2. `otr directive <n> "<task>"` prints the prompt (it embeds the issue text). Spawn one

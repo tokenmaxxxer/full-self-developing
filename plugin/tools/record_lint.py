@@ -89,6 +89,9 @@ def lint_record(path: Path) -> list[str]:
         errs.append("proposal record needs a non-empty ## Acceptance section")
     if not _section_has_content(body, "## Evidence"):
         errs.append("## Evidence is empty — a record with no evidence is a claim")
+    if fm.get("type") == "proposal" and not _section_has_content(body, "## Judgment"):
+        errs.append("proposal record needs a non-empty ## Judgment section")
+    errs.extend(_judgment_errors(body))
 
     for ref in re.findall(r"path:\s*([^\s,]+)", fm.get("upstream", "")):
         if not (Path(ref).exists()):
@@ -105,13 +108,28 @@ def find_section(body: str, header: str) -> int:
 
 
 def _section_has_content(body: str, header: str) -> bool:
+    return bool(_section_content(body, header).strip())
+
+
+def _section_content(body: str, header: str) -> str:
     i = find_section(body, header)
     if i < 0:
-        return False
+        return ""
     rest = body[i + len(header):]
     j = rest.find("\n## ")
-    chunk = rest if j < 0 else rest[:j]
-    return bool(chunk.strip())
+    return rest if j < 0 else rest[:j]
+
+
+def _judgment_errors(body: str) -> list[str]:
+    """`## Judgment` (when present) must be `none` or, if it lists more than one
+    method, mark which is smallest."""
+    content = _section_content(body, "## Judgment").strip()
+    if not content or content.lower() == "none":
+        return []
+    methods = [ln for ln in content.splitlines() if ln.strip().startswith("-")]
+    if len(methods) > 1 and not any("(smallest)" in ln for ln in methods):
+        return ["## Judgment lists more than one method without marking which is smallest"]
+    return []
 
 
 def main(argv: list[str]) -> int:

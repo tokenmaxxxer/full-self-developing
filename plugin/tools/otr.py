@@ -122,6 +122,39 @@ def frontmatter_of(text: str) -> dict[str, str]:
     return fm or {}
 
 
+def record_body_of(text: str) -> str:
+    sys.path.insert(0, str(TOOLS))
+    from record_lint import parse_frontmatter
+    _, body = parse_frontmatter(text)
+    return body
+
+
+def extract_section(body: str, header: str) -> str:
+    """Text of a `## Header` section up to the next `## ` or end, stripped."""
+    sys.path.insert(0, str(TOOLS))
+    from record_lint import find_section
+    i = find_section(body, header)
+    if i < 0:
+        return ""
+    rest = body[i + len(header):]
+    j = rest.find("\n## ")
+    return (rest if j < 0 else rest[:j]).strip()
+
+
+def set_section(body: str, header: str, content: str) -> str:
+    """Replace a `## Header` section's content in place, or append it if absent."""
+    sys.path.insert(0, str(TOOLS))
+    from record_lint import find_section
+    block = f"{header}\n\n{content}\n"
+    i = find_section(body, header)
+    if i < 0:
+        return body.rstrip() + "\n\n" + block
+    rest = body[i + len(header):]
+    j = rest.find("\n## ")
+    tail = "" if j < 0 else rest[j:]
+    return body[:i] + block + tail
+
+
 # ---------------------------------------------------------------- init
 
 def cmd_init(a: argparse.Namespace) -> None:
@@ -176,21 +209,6 @@ def cmd_init(a: argparse.Namespace) -> None:
 
 
 # ---------------------------------------------------------------- issue
-
-ISSUE_BODY = """\
-## Need
-
-{need}
-
-## Acceptance
-
-{acceptance}
-
-## Out of scope
-
-{out_of_scope}
-"""
-
 
 def cmd_issue(a: argparse.Namespace) -> None:
     body = a.body
@@ -275,14 +293,20 @@ the ## Deviations section verbatim (or "none").
 
 PHASE_RULES = {
     "proposal": """\
-- Deliver a proposal only: what you will change, how, and how each Acceptance item of the
-  issue will be verified. No implementation beyond throwaway probes.
+- Deliver a proposal only: what you will change, how. No implementation beyond
+  throwaway probes.
+- Put a proposed `## Acceptance` and `## Out of scope` in your record
+  (plugin/templates/record.md has the sections) and say how each Acceptance item will
+  be verified. If the issue above already has `## Acceptance` / `## Out of scope`, keep
+  or refine them there instead and say which — the human is never asked to write them
+  up front, so their absence in the issue is the normal case, not an error.
 - Record: type: proposal, loop_state: proposed. Commit on your branch.""",
     "delivery": """\
-- The proposal on this branch was approved on the issue. Implement exactly it; deviations
-  go under ## Deviations.
+- The proposal on this branch was approved on the issue, which by then carries the
+  approved `## Acceptance`. Implement exactly it; deviations go under ## Deviations.
 - Record: rewrite it as type: implementation (or verification/repair as fits),
-  loop_state: landed, with ## Acceptance verification covering every Acceptance item.""",
+  loop_state: landed, with ## Acceptance verification covering every item in the
+  issue's current `## Acceptance` section.""",
 }
 
 
@@ -414,14 +438,29 @@ def cmd_delegation(a: argparse.Namespace) -> None:
 def cmd_approve(a: argparse.Namespace) -> None:
     login = require_approver()
     branch = f"issue-{a.issue}/{a.hex}"
-    if not record_on(branch, a.issue, a.hex) and not pr_for(branch):
+    text = record_on(branch, a.issue, a.hex)
+    if not text and not pr_for(branch):
         sys.exit(f"otr: nothing published for {branch}")
     via = ""
     if a.via == "delegation":
         d = require_delegation(a.issue)
         via = f" VIA DELEGATION until {d['until'].isoformat()}"
     sha = git("rev-parse", "--short", branch, check=False) or "?"
-    gh("issue", "comment", str(a.issue), "--body", f"APPROVE issue-{a.issue}/{a.hex}{via}\n\nat {sha}\n\n{a.note or ''}")
+    wrote = []
+    if text:
+        rec_body = record_body_of(text)
+        issue_body = issue_view(a.issue)["body"]
+        for header, label in (("## Acceptance", "Acceptance"), ("## Out of scope", "Out of scope")):
+            content = extract_section(rec_body, header)
+            if content:
+                issue_body = set_section(issue_body, header, content)
+                wrote.append(label)
+        if wrote:
+            gh("issue", "edit", str(a.issue), "--body", issue_body)
+    note = a.note or ""
+    if wrote:
+        note = (note + "\n\n" if note else "") + f"Wrote {', '.join(wrote)} from the record into the issue body."
+    gh("issue", "comment", str(a.issue), "--body", f"APPROVE issue-{a.issue}/{a.hex}{via}\n\nat {sha}\n\n{note}")
     print(f"approved {branch} at {sha} → otr directive {a.issue} --phase delivery --session {a.hex}")
 
 

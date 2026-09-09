@@ -39,8 +39,12 @@ work the human can cut, accept, or revert one unit at a time.
   Priorities #1" is a claim to be cut against, not evidence.
 - An orchestrator inventing work from gaps, "while we're here", or its own
   reading of this file.
+- Hard gates that can deadlock. A check that stops the drive until a human
+  edits something is a bottleneck, not a safeguard; on-the-record had this
+  badly. Gates ask for a recorded reason, or print a notice, and let work
+  continue.
 
-- since 2026-09-09 · revised 2026-09-09
+- since 2026-09-09 · revised 2026-09-09 (added: hard gates that deadlock — the human recalled on-the-record's deadlocks when the Must first gate was designed as a refusal)
 
 ## Constraints
 

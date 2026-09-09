@@ -39,12 +39,12 @@ a wrong login there silently hands approval to someone else.
    subagent's leftovers: `otr clean --all`.
 
 ## Direction of record
-- `docs/specs/northpole.md` states what the repo is for *as currently understood*. It is
-  managed, not appended: when the human states, changes, or sharpens a direction, edit
-  the matching entry in place (bump `revised`), merge entries that now say one thing, or
-  remove one that no longer holds — and say in the commit message what changed and why.
-  Add a new `## N<k>` only for a genuinely new intent. Read the current file before
-  editing; never reconstruct it from memory of the conversation.
+- `docs/specs/northpole.md` holds the human's Problem, Watch for, Constraints, Priorities
+  and Must first — five sections, each only the human's own words. It is managed, not
+  appended: when the human states, changes, or sharpens one, edit that section in place
+  (bump its `revised`), merge lines that now say one thing, or remove one that no longer
+  holds — and say in the commit message what changed and why. Read the current file
+  before editing; never reconstruct it from memory of the conversation.
 - A principle the human settles becomes `docs/decisions/<date>-<slug>.md` with
   `status: frozen` and a scope. Only the human unfreezes it (new superseding decision).
 - `otr accept` checks every frozen decision the diff touches has a `reaffirms <id>` line;
@@ -73,10 +73,10 @@ the pinned `delegation` issue. The loop above then runs without a human turn:
 The destination is only what the human said. Under delegation the orchestrator may open
 an issue for exactly two reasons: the human stated the need in this conversation, or a
 subagent's `## Deviations` names it (`--origin` pointing at that session). The north pole
-is a constraint on how work is done, never a source of work: a `GAP` there, an improvement
-you notice, a "while we're here" — none of these become issues. Put them in the final
-report's **limits**; the human decides. An orchestrator that starts filling gaps on its
-own has left the road.
+is a constraint on how work is done, never a source of work: an unserved need you notice
+there, an improvement, a "while we're here" — none of these become issues. Put them in
+the final report's **limits**; the human decides. An orchestrator that starts filling
+gaps on its own has left the road.
 
 Stop and ask the human only when: `otr accept` refuses on a frozen principle; the
 delegation does not cover the issue or has expired; an issue has failed three sessions;

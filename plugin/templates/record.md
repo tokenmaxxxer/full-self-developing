@@ -24,6 +24,16 @@ upstream: []            # [{path: <record or file>, sha: <commit>}]
 <For each frozen decision in docs/decisions/ whose scope your diff or this record
 touches: `reaffirms <id>` — one per line. Write `none touched` otherwise.>
 
+## Acceptance
+
+<Proposal record: propose it here, or, if the issue already has one, keep or refine it
+and say which — required non-empty on a proposal record. Delivery record: leave as
+carried over, or note the issue's Acceptance was left unchanged.>
+
+## Out of scope
+
+<Same as ## Acceptance above. May be empty — a proposal need not exclude anything.>
+
 ## Deviations
 
 <Anything outside the issue's scope that came up. Recorded, not fixed.>

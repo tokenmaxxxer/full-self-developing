@@ -21,11 +21,12 @@ does not steer. The destination is only what the human said: this file
 constrains how the car drives, it is not a map of places to go. Gaps here
 are reported, never self-assigned.
 
-- since 2026-09-08 · revised 2026-09-08 (added: the north pole is a constraint, not a source of work — an orchestrator on delegation was seen inventing work from GAPs)
+- since 2026-09-08 · revised 2026-09-09 (the drive living inside one interactive session is accepted, not a gap: the human keeps the machine on across off-hours)
 - served by: `DELEGATE … UNTIL …` comment on the `delegation` issue,
   `otr approve/accept --via delegation`, `otr issue --origin` for deviations,
-  the Drive section of `CLAUDE.md`. `GAP`: the drive runs inside one
-  interactive session; nothing resumes it if that session ends mid-round
+  the Drive section of `CLAUDE.md`. The drive runs inside one interactive
+  session that the human leaves running; nothing resumes it if that
+  session ends mid-round, and that is the accepted operating mode.
 
 ## N1 — GitHub is the whole record
 
@@ -68,3 +69,18 @@ editing, so a reader gets today's intent, not a history to reconstruct.
 
 - since 2026-09-08 · revised 2026-09-08
 - served by: this file, `docs/decisions/` (`status: frozen`), `otr accept` principle check
+
+## N5 — The human's working hours go to setting the destination, and that work is assisted
+
+Once work is delegated, what the human does during the day is decide
+what the agent will do through the night: which needs, in what order,
+with what acceptance, how far it may go and when it must stop, and how
+the result is read the next morning. The plugin supports that planning
+work as a first-class activity, not only the one-need-at-a-time
+conversation: a rough brief becomes a reviewed batch of issues; the
+delegation carries the plan (order, stop conditions, limits); the
+end-of-drive report lands on GitHub, not only in the chat.
+
+- since 2026-09-09 · revised 2026-09-09
+- served by: `GAP` — `otr issue` takes one need at a time; `otr delegate`
+  takes only issues and an expiry; the drive report exists only in the session

@@ -85,6 +85,8 @@ def lint_record(path: Path) -> list[str]:
         errs.append("terminal record (landed/done) needs ## Acceptance verification")
     if ls in TERMINAL and not _section_has_content(body, "## Acceptance verification"):
         errs.append("## Acceptance verification is empty")
+    if fm.get("type") == "proposal" and not _section_has_content(body, "## Acceptance"):
+        errs.append("proposal record needs a non-empty ## Acceptance section")
     if not _section_has_content(body, "## Evidence"):
         errs.append("## Evidence is empty — a record with no evidence is a claim")
 
@@ -95,8 +97,15 @@ def lint_record(path: Path) -> list[str]:
     return [f"{path}: {e}" for e in errs]
 
 
+def find_section(body: str, header: str) -> int:
+    """Index of `header` as its own line (not a prefix of a longer header, e.g.
+    `## Acceptance` must not match inside `## Acceptance verification`)."""
+    m = re.search(rf"(?m)^{re.escape(header)}\s*$", body)
+    return m.start() if m else -1
+
+
 def _section_has_content(body: str, header: str) -> bool:
-    i = body.find(header)
+    i = find_section(body, header)
     if i < 0:
         return False
     rest = body[i + len(header):]

@@ -38,6 +38,7 @@ import subprocess
 import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
+from fnmatch import fnmatch
 from pathlib import Path
 
 _top = subprocess.run(["git", "rev-parse", "--show-toplevel"], capture_output=True, text=True)
@@ -483,6 +484,160 @@ def _require_principles(branch: str, record_text: str) -> None:
         sys.exit("otr: branch touches frozen decision(s) with no `reaffirms <id>` under ## Principles:\n" + "\n".join(lines))
 
 
+_STOPWORDS = {
+    "a", "an", "the", "of", "to", "in", "on", "for", "and", "or", "is", "are", "be",
+    "that", "this", "it", "its", "as", "with", "by", "at", "from", "not", "no", "if",
+    "when", "than", "then", "so", "do", "does", "did", "has", "have", "had", "was",
+    "were", "will", "would", "can", "may", "must", "never", "only", "one", "their",
+    "they", "them", "which", "who", "what", "each", "every", "any", "some", "other",
+    "another", "own", "same", "such", "also", "into", "under", "over", "out", "up",
+}
+
+
+def _words(s: str) -> set[str]:
+    return {w for w in re.findall(r"[a-z][a-z']+", s.lower()) if w not in _STOPWORDS and len(w) > 2}
+
+
+def _claims(bullet: str, text: str) -> bool:
+    """True if a majority of `bullet`'s significant words show up in `text` — a
+    paraphrase match, not a quote match (the north pole's prose wraps and a record
+    is not required to repeat it verbatim)."""
+    bw = _words(bullet)
+    if not bw:
+        return True
+    return len(bw & _words(text)) * 2 >= len(bw)
+
+
+def _section(text: str, header: str) -> str:
+    sys.path.insert(0, str(TOOLS))
+    from record_lint import find_section
+    i = find_section(text, header)
+    if i < 0:
+        return ""
+    rest = text[i + len(header):]
+    j = rest.find("\n## ")
+    return rest if j < 0 else rest[:j]
+
+
+def _bullets(section_text: str) -> list[str]:
+    """`- ` bullets from a north-pole/issue section, continuation lines joined onto
+    their bullet, the `- since ... revised ...` metadata line dropped."""
+    out: list[str] = []
+    for line in section_text.splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("- since") and "revised" in s:
+            continue
+        if s.startswith("-"):
+            out.append(s.lstrip("- ").strip())
+        elif out:
+            out[-1] += " " + s
+    return out
+
+
+def _must_first_claim_text(record_text: str) -> str:
+    """Where a record can claim to satisfy a Must-first item: its own verification of
+    what it did, its judgment of why, and its Acceptance section — which by convention
+    (`otr approve` writes the issue's Acceptance into the issue, and records keep or
+    quote it) carries the issue's title/Problem/Acceptance without a second GitHub call."""
+    body = record_body_of(record_text)
+    return "\n".join([
+        extract_section(body, "## Acceptance verification"),
+        extract_section(body, "## Judgment"),
+        extract_section(body, "## Acceptance"),
+    ])
+
+
+def _landed_records_on_main() -> list[str]:
+    """Full text of every docs/issue-*/reports/*.md on `main` whose loop_state is
+    landed/done. A delivery branch has already merged main in (per the directive), so
+    this needs no GitHub call — just the git history already in this checkout."""
+    paths = [p for p in git("ls-tree", "-r", "--name-only", MAIN, "--", "docs").splitlines()
+             if re.match(r"docs/issue-\d+/reports/[0-9a-f]{8}\.md$", p)]
+    out = []
+    for p in paths:
+        text = git("show", f"{MAIN}:{p}", check=False)
+        if text and frontmatter_of(text).get("loop_state") in ("landed", "done"):
+            out.append(text)
+    return out
+
+
+def _require_must_first(record_text: str) -> None:
+    """Notice only — never refuses. A hard gate on Must-first order was tried and
+    rejected: it deadlocks every later issue once the satisfying one is accepted but
+    nobody has gone back to edit the north pole (the human's own account of the
+    predecessor system's failure mode; see ## Judgment). A Must-first item is "met"
+    for this notice's purposes once some landed/done record on main claims it, or the
+    human edits it out of (or revises it in) northpole.md; either quiets the notice on
+    its own, with no otr command needed to acknowledge it."""
+    northpole = (ROOT / "docs/specs/northpole.md").read_text()
+    bullets = _bullets(_section(northpole, "## Must first"))
+    own = _must_first_claim_text(record_text)
+    landed = [_must_first_claim_text(t) for t in _landed_records_on_main()]
+    unmet = [b for b in bullets if not _claims(b, own) and not any(_claims(b, t) for t in landed)]
+    for b in unmet:
+        print(f"notice: Must first not yet met — {b}")
+
+
+def _require_watch_for_evidence(n: int, record_text: str) -> None:
+    """Every bullet under the issue's own `## Watch for` needs a line in this record's
+    `## Evidence` that shows it was checked — not a bigger Evidence section, one line
+    per item (`evidence-per-acceptance-item`)."""
+    bullets = _bullets(_section(issue_view(n)["body"], "## Watch for"))
+    if not bullets:
+        return
+    evidence = extract_section(record_body_of(record_text), "## Evidence")
+    missing = [b for b in bullets if not _claims(b, evidence)]
+    if missing:
+        lines = [f"  - {b}" for b in missing]
+        sys.exit("otr: issue's Watch for item(s) with no evidence line in this record's ## Evidence:\n" + "\n".join(lines))
+
+
+_TEST_INFRA_GLOBS = ["**/test/**", "**/tests/**", "**/*_test.*", "**/*.test.*", "**/*.spec.*", "**/conftest.py"]
+
+
+def _glob_hit(path: str, globs: list[str]) -> bool:
+    for g in globs:
+        if fnmatch(path, g):
+            return True
+        if g.endswith("/**") and (path == g[:-3] or path.startswith(g[:-3] + "/")):
+            return True
+    return False
+
+
+def _require_reason_for_unrequested_files(n: int, branch: str, record_text: str) -> None:
+    """A diff that adds CI/deploy/workflow files (the `minimal-change` decision's own
+    globs — no second list) or new, unnamed test-infrastructure files needs a reason in
+    this record's `## Judgment`. This never forbids the files, only a missing reason."""
+    sys.path.insert(0, str(TOOLS))
+    import decisions
+    minimal = next((d for d in decisions.frozen() if d.id == "minimal-change"), None)
+    # minimal-change's scope.globs also names the files that *implement* the decision
+    # (plugin/templates/record.md, this file) so reaffirms-detection can find them; only
+    # the CI/deploy/workflow-shaped entries describe an unrequested *file kind*.
+    ci_globs = [g for g in (minimal.globs if minimal else [])
+                if g.startswith(".github") or "/ci/" in g or "/deploy/" in g or g.endswith((".yml", ".yaml"))]
+    all_paths = git("diff", "--name-only", f"{MAIN}...{branch}").splitlines()
+    added = set(git("diff", "--diff-filter=A", "--name-only", f"{MAIN}...{branch}").splitlines())
+    acceptance = extract_section(issue_view(n)["body"], "## Acceptance").lower()
+
+    flagged = {p for p in all_paths if _glob_hit(p, ci_globs)}
+    for p in added:
+        if _glob_hit(p, _TEST_INFRA_GLOBS) and p.lower() not in acceptance and Path(p).name.lower() not in acceptance:
+            flagged.add(p)
+    if not flagged:
+        return
+    judgment = extract_section(record_body_of(record_text), "## Judgment").strip()
+    if judgment and judgment.lower() != "none":
+        return
+    lines = [f"  - {p}" for p in sorted(flagged)]
+    sys.exit(
+        "otr: diff adds CI/deploy/workflow or unnamed test-infrastructure file(s) with no "
+        "reason in this record's ## Judgment:\n" + "\n".join(lines)
+    )
+
+
 def _lint_on_branch(branch: str, rec_path: str) -> None:
     WS.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=str(WS)) as td:
@@ -511,6 +666,9 @@ def cmd_accept(a: argparse.Namespace) -> None:
         sys.exit(f"otr: record loop_state is {fm.get('loop_state')!r}, not landed/done")
     _lint_on_branch(branch, f"docs/issue-{n}/reports/{hexid}.md")
     _require_principles(branch, text)
+    _require_must_first(text)
+    _require_watch_for_evidence(n, text)
+    _require_reason_for_unrequested_files(n, branch, text)
     pr = pr_for(branch)
     if not pr or pr["state"] != "OPEN":
         sys.exit(f"otr: no open PR for {branch} — `otr publish {n} {hexid}` first")

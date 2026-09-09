@@ -1,6 +1,6 @@
 {
   "name": "full-self-developing",
   "description": "Drive a stated need to a landed, recorded result: git is the ledger, subagents do the work, the human supervises. /full-self-developing:run",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "author": { "name": "Jung Jiwon & Lee Jongkwan" }
 }

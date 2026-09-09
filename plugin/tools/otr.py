@@ -141,7 +141,27 @@ def cmd_init(a: argparse.Namespace) -> None:
     today = _now().date().isoformat()
     put("docs/specs/approvers.md", f"# Approvers\n\nOne GitHub login per line. Only these may approve, accept, reject, delegate.\nWritten by `otr init` from `gh api user`; add a line only for a person you mean.\n\n{login}\n")
     put("docs/decisions/README.md", (PKG / "templates/decisions-README.md").read_text())
-    put("docs/specs/northpole.md", f"# North pole\n\nWhat this repository is for, as currently understood. Edited in place as\nthinking changes; history is `git log -p` on this file.\n\n## N0 — \n\n- since {today} · revised {today}\n- served by: GAP\n")
+    put("docs/specs/northpole.md", (
+        "# North pole\n\n"
+        "What the human has decided for this repository. Five sections, each holding\n"
+        "only the human's own words. Edited in place as thinking changes; history is\n"
+        "`git log -p` on this file.\n\n"
+        "## Problem\n\n"
+        "(which problem, and why — the human's own words)\n\n"
+        f"- since {today} · revised {today}\n\n"
+        "## Watch for\n\n"
+        "(what could go wrong or be overdone as work proceeds)\n\n"
+        f"- since {today} · revised {today}\n\n"
+        "## Constraints\n\n"
+        "(what may not be crossed)\n\n"
+        f"- since {today} · revised {today}\n\n"
+        "## Priorities\n\n"
+        "(when two goods conflict, which wins — ranked)\n\n"
+        f"- since {today} · revised {today}\n\n"
+        "## Must first\n\n"
+        "(what must happen before anything else is worth accepting)\n\n"
+        f"- since {today} · revised {today}\n"
+    ))
     gi = ROOT / ".gitignore"
     if "runs/" not in (gi.read_text() if gi.exists() else ""):
         with gi.open("a") as f:
@@ -211,9 +231,12 @@ All work and every command below happens inside that directory.
 Scratch files (probe repos, temp clones, logs) go ONLY under {root}/runs/scratch/issue-{n}-{hex}/
 — never under /tmp or $HOME. Delete that directory before your final reply.
 
-BEFORE ANYTHING ELSE read docs/specs/northpole.md (what this repo is for) and every
-`status: frozen` file in docs/decisions/ (`python3 {tools}/decisions.py` lists them). A change
-that works against either is a deviation to record, never a judgment call to make.
+BEFORE ANYTHING ELSE read docs/specs/northpole.md — Problem, Watch for, Constraints,
+Priorities, Must first — and every `status: frozen` file in docs/decisions/ (`python3
+{tools}/decisions.py` lists them). Choose methods by Priorities, turn Watch for into
+checks, order work by Must first, and record such judgment under ## Judgment; a change
+against Constraints or a frozen decision is a Deviation to record, never a judgment call
+to make.
 
 ISSUE #{n} — {title}
 {body}
